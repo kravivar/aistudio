@@ -2,8 +2,8 @@ import time
 import json
 import gc
 from typing import AsyncGenerator, Dict, Any, List, Optional
-from ai_studio.config import resolve_model_path
-from ai_studio.utils.logging import logger
+from aistudio.config import resolve_model_path
+from aistudio.utils.logging import logger
 import re
 
 def clean_response(text: str, strip_whitespace: bool = False) -> str:
@@ -221,6 +221,7 @@ class LLMPipeline:
                 else:
                     # ── STREAM MODE (default) ────────────────────────────────────────────
                     # Stream tokens directly as they arrive.
+                    import asyncio
                     for response in mlx_lm.stream_generate(
                         self.model, self.tokenizer, prompt=prompt, max_tokens=max_tokens
                     ):
@@ -235,6 +236,7 @@ class LLMPipeline:
                             yield _make_chunk("<think>\n" + token_text)
                         else:
                             yield _make_chunk(token_text)
+                        await asyncio.sleep(0)
             else:
                 raw_response = mlx_lm.generate(
                     self.model,

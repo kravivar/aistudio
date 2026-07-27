@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
-from ai_studio.server.app import app
-from ai_studio.notebook.manager import notebook_manager
+from aistudio.server.app import app
+from aistudio.notebook.manager import notebook_manager
 
 client = TestClient(app)
 

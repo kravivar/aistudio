@@ -1,8 +1,8 @@
 import os
 import gc
 from typing import Dict, Any, Optional
-from ai_studio.config import resolve_model_path
-from ai_studio.utils.logging import logger
+from aistudio.config import resolve_model_path
+from aistudio.utils.logging import logger
 
 class AudioPipeline:
     def __init__(self):

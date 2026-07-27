@@ -1,6 +1,6 @@
 import json
-from ai_studio.notebook.manager import notebook_manager
-from ai_studio.notebook.synthesis import synthesis_engine
+from aistudio.notebook.manager import notebook_manager
+from aistudio.notebook.synthesis import synthesis_engine
 
 class Tools:
     """

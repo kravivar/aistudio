@@ -1,4 +1,4 @@
 """
-ai_studio notebook module
+aistudio notebook module
 Document synthesis, research notes, study tools, and podcast generation engine
 """

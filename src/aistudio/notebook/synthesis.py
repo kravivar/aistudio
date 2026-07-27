@@ -1,6 +1,6 @@
 import time
 from typing import Dict, Any, List, Optional
-from ai_studio.pipelines.llm import llm_pipeline
+from aistudio.pipelines.llm import llm_pipeline
 
 class ResearchSynthesisEngine:
     """

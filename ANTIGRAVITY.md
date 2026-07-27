@@ -1,6 +1,6 @@
-# Project Dossier: `ai_studio`
+# Project Dossier: `aistudio`
 
-> **Project Name**: `ai_studio`  
+> **Project Name**: `aistudio`  
 > **Target Framework**: Python 3.11 (`uv` managed), MLX, PyTorch MPS, FastAPI, Open WebUI, Open Notebook (SurrealDB)  
 > **Hardware**: Apple Silicon (Unified Memory Architecture)  
 > **Primary Interfaces**: **Open WebUI** (Chat, Vision, Image & Video Studio) & **Open Notebook** (Research, Learning & Synthesis)
@@ -9,9 +9,9 @@
 
 ## 1. Executive Summary & Vision
 
-`ai_studio` is a modular Python package and OpenAI-compliant REST API server built specifically to host state-of-the-art AI models natively on Apple Silicon using Apple's MLX framework and PyTorch MPS.
+`aistudio` is a modular Python package and OpenAI-compliant REST API server built specifically to host state-of-the-art AI models natively on Apple Silicon using Apple's MLX framework and PyTorch MPS.
 
-By acting as a single, unified local OpenAI-spec REST API provider (`http://localhost:8000/v1`), `ai_studio` powers **Open WebUI** and **Open Notebook** while retaining and exposing all local custom generation logic:
+By acting as a single, unified local OpenAI-spec REST API provider (`http://localhost:8000/v1`), `aistudio` powers **Open WebUI** and **Open Notebook** while retaining and exposing all local custom generation logic:
 
 1. **Text & Vision LLMs** (`mlx-lm`, `mlx-vlm`) — Qwen 3.6 35B, Gemma 3 12B.
 2. **Local Image Generation** (`/v1/images/generations`) — PyTorch SDXL / MPS (`juggernautXL_ragnarokBy.safetensors`) and `mflux` integrated with Open WebUI's native image generation settings.
@@ -23,7 +23,7 @@ By acting as a single, unified local OpenAI-spec REST API provider (`http://loca
 
 ## 2. Autonomous Subagent Team Configuration
 
-To execute, implement, and verify the `ai_studio` codebase efficiently, the project utilizes three specialized autonomous subagents:
+To execute, implement, and verify the `aistudio` codebase efficiently, the project utilizes three specialized autonomous subagents:
 
 ```mermaid
 graph TD
@@ -41,14 +41,14 @@ graph TD
 #### 1. System Architect (`ai_architect`)
 - **Role**: Software & AI Systems Architect.
 - **Responsibilities**:
-  - Designs system module boundaries (`src/ai_studio/server`, `pipelines`, `utils`).
+  - Designs system module boundaries (`src/aistudio/server`, `pipelines`, `utils`).
   - Defines OpenAPI REST schemas for `/v1/chat/completions`, `/v1/images/generations`, `/v1/video/generations`, `/v1/audio/transcriptions`.
   - Ensures Apple Silicon Unified Memory optimization, garbage collection strategies (`gc.collect()`), and environment-variable path discovery (`AI_STUDIO_MODELS_DIR`).
 
 #### 2. Software Engineer (`software_engineer`)
 - **Role**: Senior Python & ML Operations Engineer.
 - **Responsibilities**:
-  - Implements Python code modules across `src/ai_studio/`.
+  - Implements Python code modules across `src/aistudio/`.
   - Integrates `mlx-lm`, `mlx-vlm`, `diffusers` (SDXL MPS), `ltx-2-mlx` (video generator), `mlx-whisper`, FastAPI, and Uvicorn.
   - Builds `main.py` CLI runner for launching server, Open WebUI, and Open Notebook stack.
 
@@ -75,7 +75,7 @@ graph TD
 | `AI_STUDIO_MODEL_SEARCH_PATHS` | Colon/Comma-separated list of search directories for scanning local models. E.g., `/Volumes/DriveA/models:/Volumes/DriveB/mlx_models:./models` | `./models` |
 | `HF_HOME` | Hugging Face cache directory override. E.g., `/Volumes/ExternalNVMe/huggingface` | `~/.cache/huggingface` |
 
-### Path Resolution Logic in `ai_studio.config`:
+### Path Resolution Logic in `aistudio.config`:
 ```python
 import os
 from pathlib import Path
@@ -110,12 +110,12 @@ def resolve_model_path(model_id_or_path: str) -> str:
 
 ## 4. Image & Video Generation Specifications
 
-### A. Image Generation Logic (`ai_studio.pipelines.image`)
+### A. Image Generation Logic (`aistudio.pipelines.image`)
 - Supports PyTorch MPS `StableDiffusionXLPipeline` loading local `.safetensors` checkpoints (e.g. `juggernautXL_ragnarokBy.safetensors`).
 - Implements standard OpenAI `/v1/images/generations` payload format (`prompt`, `n`, `size`, `response_format` base64/url).
 - Integrates seamlessly with Open WebUI's built-in **Image Generation Provider** settings.
 
-### B. Video Generation Logic (`ai_studio.pipelines.video`)
+### B. Video Generation Logic (`aistudio.pipelines.video`)
 - Supports native MLX `LTX Video 2.3` multi-scene generation (`DistilledPipeline` and `TI2VidOneStagePipeline`).
 - Exposes REST API endpoint `POST /v1/video/generations` for single-scene or multi-scene timeline JSON sequences.
 - Includes OpenCV frame extraction (`extract_last_frame`) for frame-to-video continuation and FFMPEG stitching (`stitch_videos`).
@@ -132,16 +132,16 @@ graph TD
         Notebook[Open Notebook: Port 8502 / Research & Learning]
     end
 
-    WebUI -->|HTTP / SSE REST API| Server[FastAPI Server: ai_studio.server :8000]
+    WebUI -->|HTTP / SSE REST API| Server[FastAPI Server: aistudio.server :8000]
     Notebook -->|OpenAI Spec REST API| Server
     Notebook -->|SurrealDB Protocol| SurrealDB[(SurrealDB Vector Store: :8000)]
 
-    subgraph ai_studio Package (src/ai_studio)
-        Server -->|GET /v1/models| ModelRegistry[ai_studio.config / Dynamic Path Scanner]
-        Server -->|POST /v1/chat/completions| LLMPipeline[ai_studio.pipelines.llm]
-        Server -->|POST /v1/images/generations| ImagePipeline[ai_studio.pipelines.image]
-        Server -->|POST /v1/video/generations| VideoPipeline[ai_studio.pipelines.video]
-        Server -->|POST /v1/audio/transcriptions| AudioPipeline[ai_studio.pipelines.audio]
+    subgraph aistudio Package (src/aistudio)
+        Server -->|GET /v1/models| ModelRegistry[aistudio.config / Dynamic Path Scanner]
+        Server -->|POST /v1/chat/completions| LLMPipeline[aistudio.pipelines.llm]
+        Server -->|POST /v1/images/generations| ImagePipeline[aistudio.pipelines.image]
+        Server -->|POST /v1/video/generations| VideoPipeline[aistudio.pipelines.video]
+        Server -->|POST /v1/audio/transcriptions| AudioPipeline[aistudio.pipelines.audio]
         
         ModelRegistry -->|Env Resolution: AI_STUDIO_MODELS_DIR| Disk[External Disks / Local Folders]
         
@@ -157,7 +157,7 @@ graph TD
 ## 6. Directory Layout Specification
 
 ```
-ai_studio_project/
+aistudio_project/
 ├── .env.example                  # Template for AI_STUDIO_MODELS_DIR, HF_HOME, OpenAI Keys
 ├── pyproject.toml                # Project metadata, dependencies, and script entry points
 ├── README.md                     # Setup instructions and usage guide
@@ -165,7 +165,7 @@ ai_studio_project/
 ├── docker-compose.yml            # Docker stack for SurrealDB & Open Notebook
 ├── main.py                       # Unified CLI runner (server / webui / notebook)
 └── src/
-    └── ai_studio/
+    └── aistudio/
         ├── __init__.py           # Package exports and __version__
         ├── config.py             # Environment-based model discovery & path resolution
         ├── server/               # OpenAI API Server module
@@ -191,7 +191,7 @@ ai_studio_project/
 
 ```toml
 [project]
-name = "ai-studio"
+name = "aistudio"
 version = "0.1.0"
 description = "Apple Silicon Local Model Hosting for Open WebUI & Open Notebook"
 requires-python = "==3.11.*"
@@ -246,16 +246,16 @@ dependencies = [
 
 ### Phase 1: Environment & Package Bootstrap
 1. Initialize `uv` environment (`uv venv venv && source venv/bin/activate`).
-2. Create `.env.example`, `docker-compose.yml`, `pyproject.toml`, and `src/ai_studio/`.
-3. Build `src/ai_studio/config.py` with dynamic `AI_STUDIO_MODELS_DIR` environment path resolver.
+2. Create `.env.example`, `docker-compose.yml`, `pyproject.toml`, and `src/aistudio/`.
+3. Build `src/aistudio/config.py` with dynamic `AI_STUDIO_MODELS_DIR` environment path resolver.
 
-### Phase 2: Core Media Pipelines (`ai_studio.pipelines`)
+### Phase 2: Core Media Pipelines (`aistudio.pipelines`)
 1. Implement `pipelines/image.py` using `StableDiffusionXLPipeline` on PyTorch MPS.
 2. Implement `pipelines/video.py` using `ltx-2-mlx`, `extract_last_frame`, and `stitch_videos`.
 3. Implement `pipelines/llm.py` with `mlx_lm` and `mlx_vlm`.
 4. Implement `pipelines/audio.py` with `mlx-whisper`.
 
-### Phase 3: OpenAI & Media API Server (`ai_studio.server`)
+### Phase 3: OpenAI & Media API Server (`aistudio.server`)
 1. Build `schemas.py` with OpenAI & Video request/response Pydantic models.
 2. Build `app.py` FastAPI app exposing `/v1/models`, `/v1/chat/completions`, `/v1/images/generations`, `/v1/video/generations`, and `/v1/audio/transcriptions`.
 

@@ -5,7 +5,7 @@ import subprocess
 import uvicorn
 from pathlib import Path
 from dotenv import load_dotenv
-from ai_studio.config import APP_CONFIG, DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE, DEFAULT_THINKING_MODE
+from aistudio.config import APP_CONFIG, DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE, DEFAULT_THINKING_MODE
 
 load_dotenv()
 
@@ -27,7 +27,14 @@ def patch_open_webui_db(data_dir: Path, api_port: int = 8000):
                     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='config'")
                     if cursor.fetchone():
                         searx_endpoint = f"http://localhost:{api_port}/v1/search?q=<query>"
+                        openai_endpoint = f"http://localhost:{api_port}/v1"
+                        api_key = APP_CONFIG.get("server", {}).get("api_key", "local-sk-key")
                         configs = {
+                            "openai.api_base_url": json.dumps(openai_endpoint),
+                            "openai.api_key": json.dumps(api_key),
+                            "openai.api_base_urls": json.dumps([openai_endpoint]),
+                            "openai.api_keys": json.dumps([api_key]),
+                            "openai_config": json.dumps({"ENABLE_OPENAI_API": True, "OPENAI_API_BASE_URLS": [openai_endpoint], "OPENAI_API_KEYS": [api_key]}),
                             "web_search": json.dumps({"enable": True, "engine": "searxng", "searxng": {"query_url": searx_endpoint}}),
                             "rag": json.dumps({
                                 "enable_web_search": True,
@@ -101,6 +108,7 @@ def launch_webui(api_port: int, webui_port: int = 3000):
     Launches Open WebUI connected to local ai_studio API server natively via Python.
     Configured to store all database & RAG files under project ./data folder.
     """
+    server_cfg = APP_CONFIG.get("server", {})
     webui_cfg = APP_CONFIG.get("webui", {})
     webui_port = webui_cfg.get("port", webui_port)
     data_dir_str = webui_cfg.get("data_dir", "./data/webui")
@@ -115,6 +123,8 @@ def launch_webui(api_port: int, webui_port: int = 3000):
     env["DATA_DIR"] = str(data_dir)
     env["OPENAI_API_BASE_URL"] = openai_base_url
     env["OPENAI_API_BASE_URLS"] = openai_base_url
+    env["OPENAI_API_KEY"] = str(server_cfg.get("api_key", "local-sk-key"))
+    env["OPENAI_API_KEYS"] = str(server_cfg.get("api_key", "local-sk-key"))
     env["PORT"] = str(webui_port)
     env["WEBUI_PORT"] = str(webui_port)
     env["WEBUI_AUTH"] = str(webui_cfg.get("auth", os.getenv("WEBUI_AUTH", "False")))
@@ -189,8 +199,8 @@ def launch_webui(api_port: int, webui_port: int = 3000):
 
 def main():
     server_cfg = APP_CONFIG.get("server", {})
-    default_host = server_cfg.get("host") or os.getenv("AI_STUDIO_HOST", "0.0.0.0")
-    default_port = int(server_cfg.get("port") or os.getenv("AI_STUDIO_PORT", 8000))
+    default_host = server_cfg.get("host") or os.getenv("AISTUDIO_HOST") or os.getenv("AI_STUDIO_HOST", "0.0.0.0")
+    default_port = int(server_cfg.get("port") or os.getenv("AISTUDIO_PORT") or os.getenv("AI_STUDIO_PORT", 8000))
 
     parser = argparse.ArgumentParser(description="ai_studio - Local Model API Server & Optional Open WebUI Launcher")
     parser.add_argument("--host", type=str, default=default_host, help="Host address to bind")
@@ -203,8 +213,8 @@ def main():
     if args.webui:
         launch_webui(api_port=args.port)
 
-    print(f"🚀 Starting ai_studio API server on http://{args.host}:{args.port}")
-    uvicorn.run("ai_studio.server.app:app", host=args.host, port=args.port, reload=args.reload)
+    print(f"🚀 Starting aistudio API server on http://{args.host}:{args.port}")
+    uvicorn.run("aistudio.server.app:app", host=args.host, port=args.port, reload=args.reload)
 
 if __name__ == "__main__":
     main()

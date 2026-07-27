@@ -5,8 +5,8 @@ import gc
 import time
 from typing import Dict, Any, Optional
 from pathlib import Path
-from ai_studio.config import resolve_model_path
-from ai_studio.utils.logging import logger
+from aistudio.config import resolve_model_path
+from aistudio.utils.logging import logger
 
 class ImagePipeline:
     def __init__(self):

@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ai-studio"
+name = "aistudio"
 version = "0.1.0"
 description = "Apple Silicon Local Model Hosting for Open WebUI & Open Notebook"
 readme = "README.md"
@@ -35,7 +35,7 @@ dependencies = [
 ]
 
 [project.scripts]
-ai-studio = "main:main"
+aistudio = "main:main"
 
 [project.optional-dependencies]
 dev = [

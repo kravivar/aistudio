@@ -1,6 +1,6 @@
 from typing import List, Dict, Any, Optional, Union
 from pydantic import BaseModel, Field
-from ai_studio.config import DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE, DEFAULT_THINKING_MODE, DEFAULT_MODEL
+from aistudio.config import DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE, DEFAULT_THINKING_MODE, DEFAULT_MODEL
 
 class ChatMessage(BaseModel):
     role: str

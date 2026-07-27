@@ -1,7 +1,7 @@
 import logging
 import sys
 
-def setup_logger(name: str = "ai_studio") -> logging.Logger:
+def setup_logger(name: str = "aistudio") -> logging.Logger:
     logger = logging.getLogger(name)
     if not logger.handlers:
         logger.setLevel(logging.INFO)

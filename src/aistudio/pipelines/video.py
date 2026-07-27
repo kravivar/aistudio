@@ -3,9 +3,9 @@ import gc
 import time
 from typing import List, Dict, Any, Optional
 from pathlib import Path
-from ai_studio.config import resolve_model_path
-from ai_studio.utils.logging import logger
-from ai_studio.utils.media import extract_last_frame, stitch_videos
+from aistudio.config import resolve_model_path
+from aistudio.utils.logging import logger
+from aistudio.utils.media import extract_last_frame, stitch_videos
 
 class VideoPipeline:
     def __init__(self):
@@ -118,7 +118,8 @@ class VideoPipeline:
         Continuously extracts last frame of previous scene as continuation input for next scene,
         then stitches all scene videos together into output_path.
         """
-        output_dir = Path("./output/video")
+        out_path = Path(output_path)
+        output_dir = out_path.parent
         output_dir.mkdir(parents=True, exist_ok=True)
 
         generated_scenes = []

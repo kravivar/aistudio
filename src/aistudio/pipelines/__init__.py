@@ -1,0 +1,3 @@
+"""
+aistudio model pipelines module
+"""

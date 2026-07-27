@@ -7,20 +7,20 @@ from fastapi.responses import StreamingResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
-from ai_studio.config import scan_available_models, get_model_config
-from ai_studio.utils.logging import logger
-from ai_studio.server.schemas import (
+from aistudio.config import scan_available_models, get_model_config
+from aistudio.utils.logging import logger
+from aistudio.server.schemas import (
     ChatCompletionRequest,
     CompletionRequest,
     ImageGenerationRequest,
     VideoGenerationRequest,
     SpeechRequest
 )
-from ai_studio.server.manager import model_manager
-from ai_studio.pipelines.llm import llm_pipeline
-from ai_studio.pipelines.image import image_pipeline
-from ai_studio.pipelines.video import video_pipeline
-from ai_studio.pipelines.audio import audio_pipeline
+from aistudio.server.manager import model_manager
+from aistudio.pipelines.llm import llm_pipeline
+from aistudio.pipelines.image import image_pipeline
+from aistudio.pipelines.video import video_pipeline
+from aistudio.pipelines.audio import audio_pipeline
 
 app = FastAPI(
     title="AI Studio API Server",
@@ -46,7 +46,7 @@ app.mount("/static", StaticFiles(directory=str(output_dir)), name="static")
 def read_root():
     return {
         "status": "online",
-        "service": "ai_studio",
+        "service": "aistudio",
         "description": "Apple Silicon Local Model Host Server",
         "version": "0.1.0",
         "docs": "/docs"
@@ -264,7 +264,7 @@ def get_notes(query: Optional[str] = None):
     """
     Retrieves stored research notes or searches by query keyword.
     """
-    from ai_studio.notebook.manager import notebook_manager
+    from aistudio.notebook.manager import notebook_manager
     if query:
         return {"notes": notebook_manager.search_notes(query)}
     return {"notes": notebook_manager.get_notes()}
@@ -274,7 +274,7 @@ def create_note(req: dict):
     """
     Creates a new research note.
     """
-    from ai_studio.notebook.manager import notebook_manager
+    from aistudio.notebook.manager import notebook_manager
     title = req.get("title", "Untitled Note")
     content = req.get("content", "")
     tags = req.get("tags", [])
@@ -286,7 +286,7 @@ def synthesize_research(req: dict):
     """
     Open Notebook synthesis endpoint: summarize, expand, questions, or podcast.
     """
-    from ai_studio.notebook.synthesis import synthesis_engine
+    from aistudio.notebook.synthesis import synthesis_engine
     model_manager.prepare_pipeline("llm")
     action = req.get("action", "summarize")
     content = req.get("content", "")

@@ -1,4 +1,4 @@
 """
-ai_studio server package
+aistudio server package
 FastAPI REST API server for OpenAI-compliant endpoints
 """

@@ -1,10 +1,10 @@
 import threading
 import gc
-from ai_studio.utils.logging import logger
-from ai_studio.pipelines.llm import llm_pipeline
-from ai_studio.pipelines.image import image_pipeline
-from ai_studio.pipelines.video import video_pipeline
-from ai_studio.pipelines.audio import audio_pipeline
+from aistudio.utils.logging import logger
+from aistudio.pipelines.llm import llm_pipeline
+from aistudio.pipelines.image import image_pipeline
+from aistudio.pipelines.video import video_pipeline
+from aistudio.pipelines.audio import audio_pipeline
 
 class ModelManager:
     """

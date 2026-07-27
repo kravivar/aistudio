@@ -1,8 +1,8 @@
-# `ai_studio`
+# `aistudio`
 
 > **Apple Silicon Native Unified AI Model & Research Server for Open WebUI**
 
-`ai_studio` is a high-performance Python package and OpenAI-compliant REST API server designed to host and execute state-of-the-art AI models natively on Apple Silicon using Apple's **MLX** framework and **PyTorch MPS**, integrated with Open Notebook synthesis features and Open WebUI extensions.
+`aistudio` is a high-performance Python package and OpenAI-compliant REST API server designed to host and execute state-of-the-art AI models natively on Apple Silicon using Apple's **MLX** framework and **PyTorch MPS**, integrated with Open Notebook synthesis features and Open WebUI extensions.
 
 ---
 
@@ -27,7 +27,7 @@
 
 ### Step 1: One-Command Sync & Installation
 
-Run `uv sync --extra dev` to automatically create the Python 3.11 environment (`.venv`) and install all dependencies (including `open-webui`, `ai_studio`, and development tools):
+Run `uv sync --extra dev` to automatically create the Python 3.11 environment (`.venv`) and install all dependencies (including `open-webui`, `aistudio`, and development tools):
 
 ```bash
 uv sync --extra dev
@@ -49,11 +49,11 @@ cp .env.example .env
 
 ---
 
-## 🏃 Running `ai_studio`
+## 🏃 Running `aistudio`
 
 ### Option A: Launch API Server Only (Default)
 
-Starts the `ai_studio` REST API server on `http://0.0.0.0:8000`:
+Starts the `aistudio` REST API server on `http://0.0.0.0:8000`:
 
 ```bash
 python main.py
@@ -63,7 +63,7 @@ Access Interactive Swagger Documentation at: `http://localhost:8000/docs`
 
 ### Option B: Launch API Server + Open WebUI
 
-Starts the `ai_studio` API server and launches native Open WebUI at `http://localhost:3000`:
+Starts the `aistudio` API server and launches native Open WebUI at `http://localhost:3000`:
 
 ```bash
 python main.py --webui
@@ -75,11 +75,11 @@ python main.py --webui
 
 To import custom tools into Open WebUI (**Workspace → Functions / Tools**):
 
-1. **LTX Video Generator Pipe** ([`src/ai_studio/webui_tools/video_pipe.py`](file:///Users/kripakaranravivarman/git/ai_studio/src/ai_studio/webui_tools/video_pipe.py)):
+1. **LTX Video Generator Pipe** ([`src/aistudio/webui_tools/video_pipe.py`](file:///Users/kripakaranravivarman/git/aistudio/src/aistudio/webui_tools/video_pipe.py)):
    - In Open WebUI, go to **Workspace → Functions → Add Function**.
    - Copy content from `video_pipe.py` to enable multi-scene video generation directly in chat.
 
-2. **Open Notebook Research Tool** ([`src/ai_studio/webui_tools/research_tool.py`](file:///Users/kripakaranravivarman/git/ai_studio/src/ai_studio/webui_tools/research_tool.py)):
+2. **Open Notebook Research Tool** ([`src/aistudio/webui_tools/research_tool.py`](file:///Users/kripakaranravivarman/git/aistudio/src/aistudio/webui_tools/research_tool.py)):
    - In Open WebUI, go to **Workspace → Tools → Add Tool**.
    - Copy content from `research_tool.py` to enable agentic note-taking, search, document synthesis, and podcast script creation.
 
@@ -103,14 +103,14 @@ To import custom tools into Open WebUI (**Workspace → Functions / Tools**):
 ## 🛠 Project Structure
 
 ```
-ai_studio/
+aistudio/
 ├── .env.example
 ├── pyproject.toml
 ├── README.md
 ├── ANTIGRAVITY.md
 ├── main.py
 └── src/
-    └── ai_studio/
+    └── aistudio/
         ├── config.py
         ├── notebook/
         │   ├── manager.py

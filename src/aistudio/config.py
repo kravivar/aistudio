@@ -8,13 +8,14 @@ import yaml
 load_dotenv()
 
 def load_yaml_config() -> dict:
-    config_path = Path("./config.yml").resolve()
-    if config_path.exists():
-        try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                return yaml.safe_load(f) or {}
-        except Exception:
-            pass
+    for filename in ["config.yml", "config.yaml"]:
+        config_path = Path(filename).resolve()
+        if config_path.exists():
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    return yaml.safe_load(f) or {}
+            except Exception:
+                pass
     return {}
 
 APP_CONFIG = load_yaml_config()

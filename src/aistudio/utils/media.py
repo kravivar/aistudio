@@ -2,7 +2,7 @@ import os
 import subprocess
 from typing import List, Optional
 from pathlib import Path
-from ai_studio.utils.logging import logger
+from aistudio.utils.logging import logger
 
 def extract_last_frame(video_path: str, output_image_path: str) -> Optional[str]:
     """
