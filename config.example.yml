@@ -1,0 +1,51 @@
+# AI Studio Configuration File (config.example.yml)
+
+# Server Configuration
+server:
+  host: "0.0.0.0"
+  port: 8000
+  api_key: "local-sk-key"
+  hf_home: "~/.cache/huggingface"
+  default_models:
+    - id: "mlx-community/gemma-2-9b-it-4bit"
+      owned_by: "mlx-community"
+      type: "llm"
+      max_tokens: 2048
+      temperature: 0.7
+      thinking_mode: "off"
+    - id: "mlx-community/Qwen3.6-35B-A3B-4bit"
+      owned_by: "mlx-community"
+      type: "llm"
+      max_tokens: 8192
+      temperature: 0.7
+      thinking_mode: "stream"
+
+# Open WebUI Configuration & Local Database Folder
+webui:
+  port: 3000
+  data_dir: "./data/webui"
+  auth: false
+  enable_signup: false
+  enable_ollama_api: false
+  name: "AI Studio"
+  admin_email: "admin@aistudio.local"
+  admin_password: "adminpassword123"
+  secret_key: "ai-studio-secret"
+  telemetry: false
+  do_not_track: true
+  scarf_no_analytics: true
+  enable_community_sharing: false
+  show_admin_details: false
+  stream_response: true
+
+# SearXNG Web Search Integration (Hosted via local /v1/search API endpoint)
+web_search:
+  enable: true
+  engine: "searxng"
+  query_url: "http://localhost:8000/v1/search?q=<query>"
+
+# Document RAG & PDF OCR Image Extraction
+document_rag:
+  pdf_extract_images: true
+  enable_ocr_text_extraction: true
+  content_extraction_engine: ""
