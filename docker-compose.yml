@@ -1,0 +1,57 @@
+services:
+  surrealdb:
+    image: surrealdb/surrealdb:v2
+    command: ["start", "--log", "info", "--user", "${SURREAL_USER:-root}", "--pass", "${SURREAL_PASSWORD:-root}", "rocksdb:/mydata/mydatabase.db"]
+    user: root  # Required for bind mounts on Linux
+    ports:
+      # Bound to localhost 8001 on host to avoid conflict with local API server on 8000 / 3001
+      - "127.0.0.1:8001:8000"
+    volumes:
+      - ./surreal_data:/mydata
+    environment:
+      - SURREAL_EXPERIMENTAL_GRAPHQL=true
+    restart: always
+    pull_policy: always
+
+  open_notebook:
+    image: lfnovo/open_notebook:v1-latest
+    ports:
+      - "8502:8502"  # Web UI
+      - "5055:5055"  # REST API
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - OPEN_NOTEBOOK_ENCRYPTION_KEY=${OPEN_NOTEBOOK_ENCRYPTION_KEY:-aistudio-secret-key-3001}
+      - SURREAL_URL=ws://surrealdb:8000/rpc
+      - SURREAL_USER=${SURREAL_USER:-root}
+      - SURREAL_PASSWORD=${SURREAL_PASSWORD:-root}
+      - SURREAL_NAMESPACE=open_notebook
+      - SURREAL_DATABASE=open_notebook
+      
+      # ── OPENAI-COMPATIBLE PROVIDER CONFIGURATION (aistudio Local API) ───
+      - OPENAI_COMPATIBLE_BASE_URL=http://host.docker.internal:3001/v1
+      - OPENAI_COMPATIBLE_API_KEY=local-sk-key
+      - OPENAI_API_BASE_URL=http://host.docker.internal:3001/v1
+      - OPENAI_API_KEY=local-sk-key
+
+      # ── DEFAULT MODEL ASSIGNMENTS ───────────────────────────────────────
+      # Chat / Reasoning model
+      - DEFAULT_CHAT_MODEL=mlx-community/Qwen3.6-35B-A3B-4bit
+      # Large Context model (Document Analysis & Deep Synthesis)
+      - DEFAULT_LARGE_CONTEXT_MODEL=mlx-community/Qwen3.6-35B-A3B-4bit
+      # Transformation model (Summary, Outline, Formatting)
+      - DEFAULT_TRANSFORMATION_MODEL=mlx-community/gemma-2-9b-it-4bit
+      # Tools / Function Calling model
+      - DEFAULT_TOOLS_MODEL=mlx-community/gemma-2-9b-it-4bit
+      # Text-to-Speech model
+      - DEFAULT_TTS_MODEL=tts-1
+      # Speech-to-Text / Transcription model
+      - DEFAULT_STT_MODEL=mlx-community/whisper-large-v3-mlx
+      # Embedding model (Vector / RAG Search)
+      - DEFAULT_EMBEDDING_MODEL=text-embedding-3-small
+    volumes:
+      - ./notebook_data:/app/data
+    depends_on:
+      - surrealdb
+    restart: always
+    pull_policy: always
