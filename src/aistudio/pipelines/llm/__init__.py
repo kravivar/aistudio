@@ -1,6 +1,7 @@
 import time
 import json
 import gc
+from pathlib import Path
 from typing import AsyncGenerator, Dict, Any, List, Optional
 from aistudio.config import resolve_model_path
 from aistudio.utils.logging import logger
@@ -70,6 +71,27 @@ class LLMPipeline:
             return
         
         real_path = resolve_model_path(model_id)
+        resolved = Path(real_path)
+
+        # Handle bare .safetensors / .bin / .gguf file paths:
+        # mlx_lm.load() expects a *directory* containing config.json + weight files.
+        if resolved.is_file() and resolved.suffix in (".safetensors", ".bin", ".gguf"):
+            parent_dir = resolved.parent
+            if (parent_dir / "config.json").exists():
+                # The file lives inside a proper model directory — use that directory.
+                logger.info(
+                    f"Resolved single weight file to model directory: {parent_dir}"
+                )
+                real_path = str(parent_dir)
+            else:
+                raise RuntimeError(
+                    f"Cannot load '{resolved.name}' as an LLM model. "
+                    f"The file is a standalone weight file without a config.json in its "
+                    f"parent directory ({parent_dir}). "
+                    f"If this is a diffusion / image model, use the image generation "
+                    f"endpoint (/v1/images/generations) instead."
+                )
+
         logger.info(f"Loading LLM model from path: {real_path}")
         
         import mlx_lm
@@ -83,6 +105,9 @@ class LLMPipeline:
             self.tokenizer = None
             self.current_model_id = None
             gc.collect()
+
+    # Alias so ModelManager.prepare_pipeline can call llm_pipeline.unload()
+    unload = unload_model
 
     def format_prompt(self, messages: List[Dict[str, str]]) -> str:
         """

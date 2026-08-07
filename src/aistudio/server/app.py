@@ -1,4 +1,6 @@
 import os
+import json
+import time
 import tempfile
 from typing import Optional
 from pathlib import Path
@@ -7,7 +9,7 @@ from fastapi.responses import StreamingResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
-from aistudio.config import scan_available_models, get_model_config
+from aistudio.config import scan_available_models, get_model_config, detect_model_type, resolve_model_path
 from aistudio.utils.logging import logger
 from aistudio.server.schemas import (
     ChatCompletionRequest,
@@ -64,13 +66,109 @@ def list_models():
     }
 
 @app.post("/v1/chat/completions")
-async def chat_completions(req: ChatCompletionRequest):
+async def chat_completions(request: Request, req: ChatCompletionRequest):
     """
     OpenAI-compliant chat completions with streaming support.
     Resolves per-model parameters (max_tokens, temperature, thinking_mode) based on chosen req.model.
+
+    Auto-routing: if the selected model is a standalone .safetensors diffusion checkpoint
+    (no config.json in its parent directory), the request is transparently routed to the
+    image generation pipeline and the result is returned as an inline markdown image.
     """
-    model_manager.prepare_pipeline("llm")
     messages_dicts = [m.model_dump() for m in req.messages]
+
+    # ── Auto-detect diffusion models and route to image generation ──────────
+    model_type = detect_model_type(req.model)
+    if model_type == "diffusion":
+        logger.info(f"Auto-routing diffusion model '{req.model}' from chat to image pipeline")
+        model_manager.prepare_pipeline("image")
+
+        # Extract the last user message as the image prompt
+        user_prompt = ""
+        negative_prompt = "blurry"
+        for m in reversed(messages_dicts):
+            if m.get("role") == "user":
+                content = m.get("content", "")
+                # content can be a string or a list of content parts
+                if isinstance(content, list):
+                    user_prompt = " ".join(
+                        part.get("text", "") for part in content if part.get("type") == "text"
+                    )
+                else:
+                    user_prompt = str(content)
+                break
+
+        if not user_prompt.strip():
+            raise HTTPException(status_code=400, detail="No prompt found in messages for image generation.")
+
+        try:
+            # Save to disk instead of base64 — avoids exceeding aiohttp's 128KB SSE line limit
+            result = image_pipeline.generate(
+                prompt=user_prompt,
+                negative_prompt=req.negative_prompt or "blurry",
+                model_id=req.model,
+                n=1,
+                size=req.size or "1024x1024",
+                num_inference_steps=req.steps or 8,
+                guidance_scale=req.guidance or 2.0,
+                response_format="url"
+            )
+
+            # Build full image URL from the request's base URL + static path
+            image_url_path = result["data"][0]["url"]   # e.g. "/static/images/gen_123_0.png"
+            base_url = str(request.base_url).rstrip("/")
+            full_image_url = f"{base_url}{image_url_path}"
+
+            md_image = f"![Generated Image]({full_image_url})"
+            response_text = f"Here is your generated image:\n\n{md_image}"
+
+            completion_id = f"chatcmpl-{int(time.time())}"
+
+            if req.stream:
+                async def _image_stream():
+                    chunk = {
+                        "id": completion_id,
+                        "object": "chat.completion.chunk",
+                        "created": int(time.time()),
+                        "model": req.model,
+                        "choices": [{"index": 0, "delta": {"role": "assistant", "content": response_text}, "finish_reason": None}]
+                    }
+                    yield f"data: {json.dumps(chunk)}\n\n".encode("utf-8")
+
+                    final = {
+                        "id": completion_id,
+                        "object": "chat.completion.chunk",
+                        "created": int(time.time()),
+                        "model": req.model,
+                        "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]
+                    }
+                    yield f"data: {json.dumps(final)}\n\n".encode("utf-8")
+                    yield b"data: [DONE]\n\n"
+
+                return StreamingResponse(
+                    _image_stream(),
+                    media_type="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"}
+                )
+            else:
+                return JSONResponse(content={
+                    "id": completion_id,
+                    "object": "chat.completion",
+                    "created": int(time.time()),
+                    "model": req.model,
+                    "choices": [{
+                        "index": 0,
+                        "message": {"role": "assistant", "content": response_text},
+                        "finish_reason": "stop"
+                    }],
+                    "usage": {"prompt_tokens": len(user_prompt.split()), "completion_tokens": 1, "total_tokens": len(user_prompt.split()) + 1}
+                })
+        except Exception as e:
+            logger.error(f"Image generation via chat auto-route failed: {e}")
+            raise HTTPException(status_code=500, detail=f"Image generation failed: {e}")
+
+    # ── Standard LLM chat completion path ───────────────────────────────────
+    model_manager.prepare_pipeline("llm")
 
     # Resolve per-model defaults from config.yml if caller did not specify them
     model_cfg = get_model_config(req.model)
@@ -155,7 +253,7 @@ async def image_generations(req: ImageGenerationRequest):
         res = image_pipeline.generate(
             prompt=req.prompt,
             negative_prompt=req.negative_prompt or "blurry",
-            model_id=req.model or "models/hub/snapshots/juggernautXL_ragnarokBy.safetensors",
+            model_id=req.model or "juggernautXL_ragnarokBy.safetensors",
             n=req.n or 1,
             size=req.size or "1024x1024",
             num_inference_steps=req.num_inference_steps or 8,

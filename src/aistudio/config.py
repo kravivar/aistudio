@@ -86,6 +86,12 @@ def resolve_model_path(model_id_or_path: str) -> str:
     Checks if model_id_or_path is an absolute path or exists within any 
     configured external drive / local search paths (including subfolders like $HF_HOME/custom_safetensors).
     """
+    cfg = get_model_config(model_id_or_path)
+    if cfg and "from_file" in cfg:
+        from_file_path = Path(HF_HOME) / cfg["from_file"]
+        if from_file_path.exists():
+            return str(from_file_path.resolve())
+
     candidate = Path(model_id_or_path).expanduser()
     if candidate.exists():
         return str(candidate.resolve())
@@ -103,6 +109,29 @@ def resolve_model_path(model_id_or_path: str) -> str:
             
     return model_id_or_path
 
+def detect_model_type(model_id_or_path: str) -> str:
+    """
+    Inspects the resolved model path and returns the likely model type:
+      - 'llm'       : directory with config.json (standard mlx_lm / HF model)
+      - 'diffusion'  : standalone .safetensors / .bin file (e.g. SDXL checkpoint)
+      - 'unknown'    : cannot determine (e.g. HuggingFace Hub ID not yet downloaded)
+    """
+    resolved = Path(resolve_model_path(model_id_or_path))
+
+    # A directory with config.json is an LLM / HF model directory
+    if resolved.is_dir():
+        if (resolved / "config.json").exists():
+            return "llm"
+        return "unknown"
+
+    # A standalone weight file without a neighbouring config.json is a diffusion checkpoint
+    if resolved.is_file() and resolved.suffix in (".safetensors", ".bin", ".gguf"):
+        if (resolved.parent / "config.json").exists():
+            return "llm"   # weight file inside a proper LLM model dir
+        return "diffusion"
+
+    return "unknown"
+
 def scan_available_models() -> List[Dict[str, Any]]:
     """
     Scans search paths recursively for local models (LLM directories, safetensors, whisper models).
@@ -118,39 +147,5 @@ def scan_available_models() -> List[Dict[str, Any]]:
     for d in defaults:
         models.append({"id": d["id"], "object": "model", "owned_by": d["owned_by"], "type": d["type"]})
         seen_ids.add(d["id"])
-
-    for search_dir in MODEL_SEARCH_PATHS:
-        if not search_dir.exists():
-            continue
-        try:
-            for path in search_dir.rglob("*"):
-                # Skip hidden files, HF snapshot commit hashes, refs, blobs, and .no_exist markers
-                parts = set(path.parts)
-                if (
-                    path.name.startswith(".")
-                    or any(p in parts for p in ["snapshots", "refs", "blobs", ".no_exist"])
-                    or (len(path.name) == 40 and all(c in "0123456789abcdefABCDEF" for c in path.name))
-                ):
-                    continue
-                model_name = path.name
-                if model_name not in seen_ids:
-                    if path.is_file() and path.suffix in [".safetensors", ".bin", ".gguf", ".pt"]:
-                        models.append({
-                            "id": model_name,
-                            "object": "model",
-                            "owned_by": "local",
-                            "path": str(path.resolve())
-                        })
-                        seen_ids.add(model_name)
-                    elif path.is_dir() and (path / "config.json").exists():
-                        models.append({
-                            "id": model_name,
-                            "object": "model",
-                            "owned_by": "local",
-                            "path": str(path.resolve())
-                        })
-                        seen_ids.add(model_name)
-        except Exception:
-            pass
 
     return models

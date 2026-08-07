@@ -12,13 +12,23 @@ server:
       type: "llm"
       max_tokens: 8192
       temperature: 0.7
-      thinking_mode: "stream"
+      thinking_mode: "off"
     - id: "mlx-community/gemma-2-9b-it-4bit"
       owned_by: "mlx-community"
       type: "llm"
       max_tokens: 2048
       temperature: 0.7
       thinking_mode: "off"
+    - id: "juggernautXL_ragnarokBy.safetensors"
+      owned_by: "local"
+      type: "image"
+      from_file: "hub/snapshots/juggernautXL_ragnarokBy.safetensors"
+      backend: "diffusers" # Optional, defaults to diffusers
+
+    # - id: "Qwen/Qwen-Image"
+    #   owned_by: "huggingface"
+    #   type: "image"
+    #   backend: "qwen"
 
 # Open WebUI Configuration & Local Database Folder
 webui:

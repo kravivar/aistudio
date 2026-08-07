@@ -13,7 +13,10 @@ class ChatCompletionRequest(BaseModel):
     max_tokens: Optional[int] = None
     stream: Optional[bool] = False
     thinking_mode: Optional[str] = None
-
+    negative_prompt: Optional[str] = None
+    size: Optional[str] = None
+    steps: Optional[int] = None
+    guidance: Optional[float] = None
 class CompletionRequest(BaseModel):
     model: str = Field(default=DEFAULT_MODEL)
     prompt: str

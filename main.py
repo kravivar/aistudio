@@ -98,6 +98,45 @@ def patch_open_webui_db(data_dir: Path, api_port: int = 8000):
                             cursor.execute("DELETE FROM user WHERE id NOT IN (SELECT min(id) FROM user WHERE email = 'admin@localhost')")
                             cursor.execute("UPDATE user SET role = 'admin', email = 'admin@localhost' WHERE email = 'admin@localhost'")
 
+                        import time
+                        import re
+                        tools_dir = Path(__file__).parent / "src" / "aistudio" / "webui_tools"
+                        if tools_dir.exists():
+                            for tool_file in tools_dir.glob("*.py"):
+                                if tool_file.name.startswith("__"): continue
+                                content = tool_file.read_text(encoding="utf-8")
+                                
+                                name_match = re.search(r'title:\s*(.*)', content)
+                                name = name_match.group(1).strip() if name_match else tool_file.stem.replace("_", " ").title()
+                                func_id = tool_file.stem
+                                
+                                if "class Tools:" in content:
+                                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='tool'")
+                                    if cursor.fetchone():
+                                        cursor.execute("SELECT id FROM tool WHERE id = ?", (func_id,))
+                                        if not cursor.fetchone():
+                                            cursor.execute(
+                                                "INSERT INTO tool (id, user_id, name, content, specs, meta, valves, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                                (func_id, "", name, content, "[]", "{}", "{}", int(time.time()), int(time.time()))
+                                            )
+                                        else:
+                                            cursor.execute("UPDATE tool SET content = ?, name = ?, updated_at = ? WHERE id = ?", (content, name, int(time.time()), func_id))
+                                else:
+                                    func_type = "pipe"
+                                    if "class Filter:" in content: func_type = "filter"
+                                    elif "class Action:" in content: func_type = "action"
+                                    
+                                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='function'")
+                                    if cursor.fetchone():
+                                        cursor.execute("SELECT id FROM function WHERE id = ?", (func_id,))
+                                        if not cursor.fetchone():
+                                            cursor.execute(
+                                                "INSERT INTO function (id, user_id, name, type, content, meta, valves, is_active, is_global, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                                (func_id, "", name, func_type, content, "{}", "{}", True, True, int(time.time()), int(time.time()))
+                                            )
+                                        else:
+                                            cursor.execute("UPDATE function SET content = ?, name = ?, type = ?, updated_at = ? WHERE id = ?", (content, name, func_type, int(time.time()), func_id))
+
                         conn.commit()
                         print(f"✅ Auto-configured Web Search (SearXNG) & PDF Image OCR in Open WebUI DB at {db_path}")
             except Exception as e:
