@@ -357,50 +357,6 @@ async def audio_speech(req: SpeechRequest):
         logger.error(f"Audio speech endpoint error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/v1/notebook/notes")
-def get_notes(query: Optional[str] = None):
-    """
-    Retrieves stored research notes or searches by query keyword.
-    """
-    from aistudio.notebook.manager import notebook_manager
-    if query:
-        return {"notes": notebook_manager.search_notes(query)}
-    return {"notes": notebook_manager.get_notes()}
-
-@app.post("/v1/notebook/notes")
-def create_note(req: dict):
-    """
-    Creates a new research note.
-    """
-    from aistudio.notebook.manager import notebook_manager
-    title = req.get("title", "Untitled Note")
-    content = req.get("content", "")
-    tags = req.get("tags", [])
-    note = notebook_manager.create_note(title=title, content=content, tags=tags)
-    return JSONResponse(content=note)
-
-@app.post("/v1/notebook/synthesis")
-def synthesize_research(req: dict):
-    """
-    Open Notebook synthesis endpoint: summarize, expand, questions, or podcast.
-    """
-    from aistudio.notebook.synthesis import synthesis_engine
-    model_manager.prepare_pipeline("llm")
-    action = req.get("action", "summarize")
-    content = req.get("content", "")
-
-    if action == "summarize":
-        res = synthesis_engine.summarize(content)
-    elif action == "expand":
-        res = synthesis_engine.expand(content)
-    elif action == "questions":
-        res = synthesis_engine.generate_questions(content)
-    elif action == "podcast":
-        res = synthesis_engine.generate_podcast_script(content)
-    else:
-        raise HTTPException(status_code=400, detail=f"Invalid action '{action}'")
-
-    return JSONResponse(content=res)
 
 @app.get("/v1/search")
 @app.get("/search")

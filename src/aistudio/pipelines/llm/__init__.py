@@ -3,7 +3,7 @@ import json
 import gc
 from pathlib import Path
 from typing import AsyncGenerator, Dict, Any, List, Optional
-from aistudio.config import resolve_model_path
+from aistudio.config import resolve_model_path, get_model_config
 from aistudio.utils.logging import logger
 import re
 
@@ -156,13 +156,22 @@ class LLMPipeline:
 
         import mlx_lm
         prompt = self.format_prompt(messages)
+        
+        cfg = get_model_config(model_id)
+        context_size = cfg.get("context_size")
+        
+        kwargs = {
+            "prompt": prompt,
+            "max_tokens": max_tokens,
+            "verbose": False
+        }
+        if context_size is not None:
+            kwargs["max_kv_size"] = int(context_size)
 
         raw_response = mlx_lm.generate(
             self.model,
             self.tokenizer,
-            prompt=prompt,
-            max_tokens=max_tokens,
-            verbose=False
+            **kwargs
         )
         response_text = clean_response(raw_response, strip_whitespace=True)
 
@@ -233,9 +242,14 @@ class LLMPipeline:
                     # ── WAIT MODE ───────────────────────────────────────────────────────
                     # Buffer the full response silently, then emit it in one shot.
                     full_text = ""
-                    for response in mlx_lm.stream_generate(
-                        self.model, self.tokenizer, prompt=prompt, max_tokens=max_tokens
-                    ):
+                    
+                    cfg = get_model_config(model_id)
+                    context_size = cfg.get("context_size")
+                    kwargs = {"prompt": prompt, "max_tokens": max_tokens}
+                    if context_size is not None:
+                        kwargs["max_kv_size"] = int(context_size)
+
+                    for response in mlx_lm.stream_generate(self.model, self.tokenizer, **kwargs):
                         full_text += clean_response(
                             getattr(response, "text", str(response)), strip_whitespace=False
                         )
@@ -247,9 +261,14 @@ class LLMPipeline:
                     # ── STREAM MODE (default) ────────────────────────────────────────────
                     # Stream tokens directly as they arrive.
                     import asyncio
-                    for response in mlx_lm.stream_generate(
-                        self.model, self.tokenizer, prompt=prompt, max_tokens=max_tokens
-                    ):
+                    
+                    cfg = get_model_config(model_id)
+                    context_size = cfg.get("context_size")
+                    kwargs = {"prompt": prompt, "max_tokens": max_tokens}
+                    if context_size is not None:
+                        kwargs["max_kv_size"] = int(context_size)
+                        
+                    for response in mlx_lm.stream_generate(self.model, self.tokenizer, **kwargs):
                         token_text = clean_response(
                             getattr(response, "text", str(response)), strip_whitespace=False
                         )

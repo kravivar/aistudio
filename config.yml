@@ -10,9 +10,10 @@ server:
     - id: "mlx-community/Qwen3.6-35B-A3B-4bit"
       owned_by: "mlx-community"
       type: "llm"
-      max_tokens: 8192
+      max_tokens: 32768
       temperature: 0.7
       thinking_mode: "off"
+      context_size: 65536
     - id: "mlx-community/gemma-2-9b-it-4bit"
       owned_by: "mlx-community"
       type: "llm"
@@ -24,6 +25,12 @@ server:
       type: "image"
       from_file: "hub/snapshots/juggernautXL_ragnarokBy.safetensors"
       backend: "diffusers" # Optional, defaults to diffusers
+
+    - id: "CyberRealisticPony_V12.7_FP16.safetensors"
+      owned_by: "local"
+      type: "image"
+      from_file: "hub/models--cyberdelia--CyberRealisticPony/CyberRealisticPony_V12.7_FP16.safetensors"
+      backend: "diffusers"
 
     # - id: "Qwen/Qwen-Image"
     #   owned_by: "huggingface"

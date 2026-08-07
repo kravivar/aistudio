@@ -12,10 +12,8 @@
 2. **Local Image Generation** (`/v1/images/generations`): PyTorch SDXL / MPS (`.safetensors` checkpoints).
 3. **Local Multi-Scene Video Generation** (`/v1/video/generations`): Multi-scene timeline generation, frame continuity, and FFMPEG video stitching.
 4. **Fast Speech-to-Text** (`/v1/audio/transcriptions`): High-speed audio transcription powered by `mlx-whisper`.
-5. **Open Notebook Research Engine** (`/v1/notebook/synthesis` & `/v1/notebook/notes`): Document summarization, concept expansion, study questions, flashcards, and multi-speaker podcast generation.
-6. **Open WebUI Integrations**:
+5. **Open WebUI Integrations**:
    - `video_pipe.py`: Custom Pipe function for generating LTX multi-scene videos in Open WebUI chat.
-   - `research_tool.py`: Custom Tool for agentic research notes, document synthesis, and study flashcards.
 
 ---
 
@@ -79,10 +77,6 @@ To import custom tools into Open WebUI (**Workspace → Functions / Tools**):
    - In Open WebUI, go to **Workspace → Functions → Add Function**.
    - Copy content from `video_pipe.py` to enable multi-scene video generation directly in chat.
 
-2. **Open Notebook Research Tool** ([`src/aistudio/webui_tools/research_tool.py`](file:///Users/kripakaranravivarman/git/aistudio/src/aistudio/webui_tools/research_tool.py)):
-   - In Open WebUI, go to **Workspace → Tools → Add Tool**.
-   - Copy content from `research_tool.py` to enable agentic note-taking, search, document synthesis, and podcast script creation.
-
 ---
 
 ## 📡 API Endpoint Summary
@@ -95,8 +89,6 @@ To import custom tools into Open WebUI (**Workspace → Functions / Tools**):
 | `/v1/images/generations` | `POST` | Text-to-Image SDXL generation |
 | `/v1/video/generations` | `POST` | Multi-scene video timeline generation & FFMPEG stitching |
 | `/v1/audio/transcriptions` | `POST` | Audio transcription via `mlx-whisper` |
-| `/v1/notebook/synthesis` | `POST` | Document summarization, expansion, flashcards, & podcasts |
-| `/v1/notebook/notes` | `GET` / `POST` | Retrieve, search, and create research notes |
 
 ---
 
@@ -112,12 +104,8 @@ aistudio/
 └── src/
     └── aistudio/
         ├── config.py
-        ├── notebook/
-        │   ├── manager.py
-        │   └── synthesis.py
         ├── webui_tools/
         │   ├── video_pipe.py
-        │   └── research_tool.py
         ├── server/
         │   ├── app.py
         │   ├── schemas.py
