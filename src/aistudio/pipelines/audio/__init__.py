@@ -68,14 +68,14 @@ class AudioPipeline:
             cleaned_text = "I have completed the task."
 
         voice_map = {
-            "alloy": "Samantha",
+            "alloy": "default",
             "echo": "Daniel",
             "fable": "Karen",
-            "nova": "Samantha",
-            "shimmer": "Samantha",
+            "nova": "Ava (Premium)",
+            "shimmer": "Ava (Premium)",
             "onyx": "Daniel"
         }
-        target_voice = voice_map.get(voice.lower(), voice) if voice else "Samantha"
+        target_voice = voice_map.get(voice.lower(), voice) if voice else "default"
 
         try:
             with tempfile.NamedTemporaryFile(suffix=".aiff", delete=False) as aiff_file, \
@@ -85,8 +85,16 @@ class AudioPipeline:
 
             # Try generating speech with requested voice; fall back to macOS default system voice if specified voice fails
             try:
-                subprocess.run(["say", "-v", target_voice, cleaned_text, "-o", aiff_path], check=True)
-            except Exception:
+                if target_voice.lower() == "default":
+                    logger.info("Using macOS system default voice.")
+                    subprocess.run(["say", cleaned_text, "-o", aiff_path], check=True, capture_output=True)
+                else:
+                    logger.info(f"Attempting to use voice: '{target_voice}'")
+                    subprocess.run(["say", "-v", target_voice, cleaned_text, "-o", aiff_path], check=True, capture_output=True)
+            except Exception as e:
+                logger.error(f"say command failed for voice '{target_voice}': {e}. Falling back to default voice.")
+                if isinstance(e, subprocess.CalledProcessError):
+                    logger.error(f"say stderr: {e.stderr.decode('utf-8', errors='ignore')}")
                 subprocess.run(["say", cleaned_text, "-o", aiff_path], check=True)
 
             # Convert AIFF to MP3 using lame if available for native audio/mpeg delivery

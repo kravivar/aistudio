@@ -76,7 +76,8 @@ def patch_open_webui_db(data_dir: Path, api_port: int = 8000):
                             # High-quality natural voice TTS configuration
                             "audio.tts.engine": '"openai"',
                             "audio.tts.openai.api_base_url": json.dumps(f"http://localhost:{api_port}/v1"),
-                            "audio.tts.voice": '"Samantha"',
+                            "audio.tts.openai.api_key": json.dumps(api_key),
+                            "audio.tts.voice": '"default"',
                             "audio.tts.model": '"tts-1"',
                             "audio.tts.split_on": '""',
                             # Force legacy function calling so Open WebUI executes forced RAG web search for custom model endpoints

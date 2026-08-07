@@ -318,9 +318,13 @@ async def audio_transcriptions(
             tmp_file.write(content)
             tmp_path = tmp_file.name
 
+        # Open WebUI hardcodes 'whisper-1' for the voice input. We must map it
+        # to the local mlx model to prevent HuggingFace hub errors.
+        actual_model = "mlx-community/whisper-large-v3-mlx" if model == "whisper-1" else model
+
         res = audio_pipeline.transcribe(
             audio_file_path=tmp_path,
-            model_id=model,
+            model_id=actual_model,
             language=language
         )
 
