@@ -219,23 +219,25 @@ def launch_webui(api_port: int, webui_port: int = 3000):
     env["IMAGE_GENERATION_ENGINE"] = "openai"
     env["IMAGES_OPENAI_API_BASE_URL"] = f"http://localhost:{api_port}/v1"
 
-    # Use open-webui serve executable from current venv if available, or python module
-    venv_bin = Path(sys.executable).parent
-    open_webui_bin = venv_bin / "open-webui"
-    
-    cmd = [
-        str(open_webui_bin) if open_webui_bin.exists() else "open-webui",
-        "serve",
-        "--port", str(webui_port),
-        "--host", "0.0.0.0"
-    ]
+    # Locate Open WebUI frontend build directory dynamically
+    import open_webui
+    frontend_dir = Path(open_webui.__file__).parent / "frontend"
+    env["FRONTEND_BUILD_DIR"] = str(frontend_dir)
 
-    try:
-        subprocess.Popen(cmd, env=env)
-        print(f"✅ Open WebUI launching at http://localhost:{webui_port}")
-    except Exception as e:
-        print(f"⚠️ Could not launch local open-webui: {e}")
-        print(f"Ensure open-webui is installed in your Python environment: pip install open-webui")
+    # Update os.environ so Open WebUI picks up the settings natively
+    os.environ.update(env)
+
+    print(f"✅ Open WebUI launching natively at http://localhost:{webui_port}")
+    import threading
+    import uvicorn
+    
+    def run_webui():
+        # Import inside the thread so it picks up the patched os.environ
+        from open_webui.main import app as webui_app
+        uvicorn.run(webui_app, host="0.0.0.0", port=webui_port, log_level="warning")
+        
+    t = threading.Thread(target=run_webui, daemon=True)
+    t.start()
 
 def main():
     server_cfg = APP_CONFIG.get("server", {})
@@ -246,15 +248,53 @@ def main():
     parser.add_argument("--host", type=str, default=default_host, help="Host address to bind")
     parser.add_argument("--port", type=int, default=default_port, help="Port to listen on")
     parser.add_argument("--reload", action="store_true", help="Enable auto-reload for development")
-    parser.add_argument("--webui", action="store_true", help="Also launch Open WebUI interface")
+    parser.add_argument("--webui", action="store_true", help="Launch Open WebUI backend (access via browser at http://localhost:3000)")
+    parser.add_argument("--nativeui", action="store_true", help="Launch Open WebUI and open the native macOS desktop window")
 
     args = parser.parse_args()
 
-    if args.webui:
-        launch_webui(api_port=args.port)
-
+    import threading
+    import time
+    
     print(f"🚀 Starting aistudio API server on http://{args.host}:{args.port}")
-    uvicorn.run("aistudio.server.app:app", host=args.host, port=args.port, reload=args.reload)
+    def run_backend():
+        # Import inside thread to avoid block
+        import uvicorn
+        uvicorn.run("aistudio.server.app:app", host=args.host, port=args.port, reload=args.reload)
+        
+    t = threading.Thread(target=run_backend, daemon=True)
+    t.start()
+
+    if args.webui or args.nativeui:
+        launch_webui(api_port=args.port)
+        
+    if args.nativeui:
+        # Wait for Open WebUI to fully bind and respond before opening the GUI
+        print("🖥️  Waiting for Open WebUI to initialize...")
+        import webview
+        import urllib.request
+        import urllib.error
+        
+        webui_cfg = APP_CONFIG.get("webui", {})
+        webui_port = webui_cfg.get("port", 3000)
+        url = f"http://localhost:{webui_port}"
+        max_retries = 30
+        for i in range(max_retries):
+            try:
+                response = urllib.request.urlopen(url)
+                if response.getcode() == 200:
+                    break
+            except urllib.error.URLError:
+                pass
+            time.sleep(1)
+            
+        print("✅ Servers ready! Starting PyWebView Desktop Window...")
+        webview.create_window("AI Studio", url, text_select=True)
+        webview.start()
+    else:
+        # Keep main thread alive if no webview
+        while True:
+            time.sleep(1)
 
 if __name__ == "__main__":
     main()
