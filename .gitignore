@@ -231,3 +231,6 @@ notebook_data/
 surreal_data/
 output/
 third_party/
+
+# Ignore local config
+**/config.yml
