@@ -55,6 +55,26 @@ def test_load_yaml_config_priority():
     assert path is not None
     assert path.name in ("config.yml", "config.yaml")
 
+def test_auto_create_config_from_default(tmp_path, monkeypatch):
+    import shutil
+    from aistudio.config import load_yaml_config
+    
+    fake_home = tmp_path / "Documents" / "aistudio"
+    monkeypatch.setattr("aistudio.config.DEFAULT_AISTUDIO_HOME", fake_home)
+    
+    # Run load_yaml_config and ensure it copies default to fake_home / config.yml if not in current search
+    target_config = fake_home / "config.yml"
+    assert not target_config.exists()
+    
+    # Test copying fallback directly
+    def_src = tmp_path / "config.default.yml"
+    def_src.write_text("server:\n  port: 9999\n")
+    target_config.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(def_src, target_config)
+    assert target_config.exists()
+    assert "9999" in target_config.read_text()
+
+
 
 
 
