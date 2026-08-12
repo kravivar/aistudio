@@ -17,6 +17,7 @@ class ChatCompletionRequest(BaseModel):
     size: Optional[str] = None
     steps: Optional[int] = None
     guidance: Optional[float] = None
+    seed: Optional[int] = None
 class CompletionRequest(BaseModel):
     model: str = Field(default=DEFAULT_MODEL)
     prompt: str
@@ -24,6 +25,7 @@ class CompletionRequest(BaseModel):
     temperature: Optional[float] = None
     stream: Optional[bool] = False
     thinking_mode: Optional[str] = None
+    seed: Optional[int] = None
 
 
 class ImageGenerationRequest(BaseModel):
@@ -35,16 +37,20 @@ class ImageGenerationRequest(BaseModel):
     num_inference_steps: Optional[int] = 8
     guidance_scale: Optional[float] = 2.0
     response_format: Optional[str] = "b64_json"
+    seed: Optional[int] = None
 
 class VideoScene(BaseModel):
     prompt: str
     duration: Optional[int] = 10
+    num_frames: Optional[int] = None
     width: Optional[int] = 704
     height: Optional[int] = 480
     fps: Optional[int] = 24
     steps: Optional[int] = 8
-    seed: Optional[int] = 42
+    seed: Optional[int] = None
     image_path: Optional[str] = None
+    images: Optional[List[str]] = None
+    two_stage: Optional[bool] = True
 
 class VideoGenerationRequest(BaseModel):
     prompt: Optional[str] = None
@@ -56,9 +62,12 @@ class VideoGenerationRequest(BaseModel):
     height: Optional[int] = 480
     fps: Optional[int] = 24
     duration: Optional[int] = 10
+    num_frames: Optional[int] = None
     steps: Optional[int] = 8
-    seed: Optional[int] = 42
+    seed: Optional[int] = None
     image_path: Optional[str] = None
+    images: Optional[List[str]] = None
+    two_stage: Optional[bool] = True
     output_path: Optional[str] = "./output/video/final_movie.mp4"
 
 class SpeechRequest(BaseModel):

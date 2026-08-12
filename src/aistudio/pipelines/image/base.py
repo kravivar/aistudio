@@ -7,7 +7,7 @@ class BaseImagePipeline(ABC):
         pass
 
     @abstractmethod
-    def generate(self, prompt: str, negative_prompt: Optional[str] = None, width: int = 1024, height: int = 1024, num_inference_steps: int = 8, guidance_scale: float = 2.0) -> Any:
+    def generate(self, prompt: str, negative_prompt: Optional[str] = None, width: int = 1024, height: int = 1024, num_inference_steps: int = 8, guidance_scale: float = 2.0, seed: Optional[int] = None) -> Any:
         pass
 
     @abstractmethod

@@ -15,7 +15,7 @@ class Pipe:
             default="http://localhost:3001/v1",
             description="The base URL for the AI Studio API"
         )
-        
+
     class UserValves(BaseModel):
         image_mode: bool = Field(default=True, description="Enable Image Generation (Turn off to fallback to text)")
         fallback_model: str = Field(default="gpt-4o", description="Fallback Text Model")
@@ -25,7 +25,7 @@ class Pipe:
         )
         size: str = Field(
             default="1024x1024",
-            description="Image Size (e.g. 512x512, 768x768, 1024x1024)"
+            description="Image Size (e.g. 512x512, 1024x1024)"
         )
         steps: int = Field(default=8, description="Inference Steps")
         guidance: float = Field(default=2.0, description="Guidance Scale")
@@ -39,7 +39,8 @@ class Pipe:
 
     def pipes(self) -> List[dict]:
         try:
-            response = requests.get(f"{self.valves.api_base_url}/models", timeout=5)
+            # We fetch from /internal/models so we can see image models even if they are hidden from the public API
+            response = requests.get(f"{self.valves.api_base_url}/internal/models", timeout=5)
             if response.status_code == 200:
                 models = response.json().get("data", [])
                 image_models = [
@@ -75,6 +76,10 @@ class Pipe:
             size = self.user_valves.size
             steps = self.user_valves.steps
             guidance = self.user_valves.guidance
+            
+        seed = body.get("seed", body.get("options", {}).get("seed", -1))
+        if seed is None:
+            seed = -1
 
         messages = body.get("messages", [])
         if not messages:
@@ -91,9 +96,11 @@ class Pipe:
                     user_prompt = str(content)
                 break
 
-        # Check which model they selected (remove the "image-studio-" prefix)
+        # Check which model they selected (remove the Open WebUI pipe ID and our prefix)
         model_id = body.get("model", "")
-        if model_id.startswith("image-studio-"):
+        if ".image-studio-" in model_id:
+            model_id = model_id.split(".image-studio-", 1)[-1]
+        elif model_id.startswith("image-studio-"):
             model_id = model_id[len("image-studio-"):]
 
         if not image_mode or __task__ or model_id == "error":
@@ -146,6 +153,8 @@ class Pipe:
             "guidance_scale": guidance,
             "response_format": "url"
         }
+        if seed != -1:
+            payload["seed"] = seed
 
         try:
             response = requests.post(f"{self.valves.api_base_url}/images/generations", json=payload, timeout=120)
@@ -163,7 +172,8 @@ class Pipe:
 
                     if __event_emitter__:
                         await __event_emitter__({"type": "status", "data": {"description": "✨ Image generation complete!", "done": True}})
-                    yield f"{md_image}\n\n*Settings: {size} | {steps} steps | {guidance} guidance*"
+                    seed_str = f" | Seed: {seed}" if seed != -1 else ""
+                    yield f"{md_image}\n\n*Settings: {size} | {steps} steps | {guidance} guidance{seed_str}*"
             else:
                 yield f"❌ Image generation error: {response.text}"
         except Exception as e:

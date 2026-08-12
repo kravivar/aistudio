@@ -34,6 +34,9 @@ dependencies = [
     "duckduckgo-search>=6.0.0",
     "pywebview>=5.3.0",
     "nuitka>=2.5.0",
+    "mlx-arsenal>=0.10.0",
+    "ltx-core-mlx",
+    "ltx-pipelines-mlx",
 ]
 
 [project.scripts]
@@ -43,4 +46,9 @@ aistudio = "main:main"
 dev = [
     "pytest>=8.0.0",
 ]
+
+[tool.uv.sources]
+ltx-core-mlx = { path = "third_party/ltx-2-mlx/packages/ltx-core-mlx", editable = true }
+ltx-pipelines-mlx = { path = "third_party/ltx-2-mlx/packages/ltx-pipelines-mlx", editable = true }
+
 

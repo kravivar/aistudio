@@ -5,37 +5,88 @@ server:
   host: "0.0.0.0"
   port: 3001
   api_key: "local-sk-key"
-  hf_home: "../mlx_local_llm/models"
+  default_model: "mlx-community/Qwen3.6-35B-A3B-4bit"
+  # hf_home: "../mlx_local_llm/models"
   default_models:
+    # Image Models
+    - id: "RunDiffusion/Juggernaut-XI-v11"
+      owned_by: "RunDiffusion"
+      type: "image"
+      backend: "diffusers"
+      size: "1024x1024"
+      steps: 8
+      guidance: 2.0
+      negative_prompt: "blurry, distorted, low quality, text"
+
+    # Video Models
+    - id: "dgrauet/ltx-2.3-mlx-q8"
+      owned_by: "dgrauet"
+      type: "video"
+      width: 704
+      height: 480
+      fps: 24
+      duration: 4.0
+      steps: 30
+      two_stage: true
+      seed: -1
+      autoplay: true
+
+    - id: "dgrauet/ltx-2.3-mlx-q4"
+      owned_by: "dgrauet"
+      type: "video"
+      width: 704
+      height: 480
+      fps: 24
+      duration: 4.0
+      steps: 8
+      two_stage: false
+      seed: -1
+      autoplay: true
+
+    # Large Language Models
+    - id: "mlx-community/Qwen2.5-0.5B-Instruct-4bit"
+      owned_by: "mlx-community"
+      type: "llm"
+      context_size: 65536    
+    - id: "mlx-community/Qwen3-Coder-Next-8bit"
+      owned_by: "mlx-community"
+      type: "llm"
+      context_size: 65536
     - id: "mlx-community/Qwen3.6-35B-A3B-4bit"
       owned_by: "mlx-community"
       type: "llm"
-      max_tokens: 32768
-      temperature: 0.7
-      thinking_mode: "off"
       context_size: 65536
-    - id: "mlx-community/gemma-2-9b-it-4bit"
+      max_tokens: 8192
+      temperature: 0.7
+      thinking_mode: "stream"
+    - id: "mlx-community/Qwen3.6-35B-A3B-8bit"
       owned_by: "mlx-community"
       type: "llm"
-      max_tokens: 2048
+      context_size: 65536
+    - id: "mlx-community/gemma-4-31b-it-8bit"
+      owned_by: "mlx-community"
+      type: "llm"
+      context_size: 32768
+      max_tokens: 8192
       temperature: 0.7
-      thinking_mode: "off"
-    - id: "juggernautXL_ragnarokBy.safetensors"
-      owned_by: "local"
-      type: "image"
-      from_file: "hub/snapshots/juggernautXL_ragnarokBy.safetensors"
-      backend: "diffusers" # Optional, defaults to diffusers
+      thinking_mode: "stream"
+    - id: "mlx-community/gemma-4-e2b-it-4bit"
+      owned_by: "mlx-community"
+      type: "llm"
+      context_size: 8192
+    - id: "mlx-community/gpt-oss-120b-MXFP4-Q8"
+      owned_by: "mlx-community"
+      type: "llm"
+      context_size: 65536
+    - id: "mlx-community/gpt-oss-20b-MXFP4-Q8"
+      owned_by: "mlx-community"
+      type: "llm"
+      context_size: 32768
 
-    - id: "CyberRealisticPony_V12.7_FP16.safetensors"
-      owned_by: "local"
-      type: "image"
-      from_file: "hub/models--cyberdelia--CyberRealisticPony/CyberRealisticPony_V12.7_FP16.safetensors"
-      backend: "diffusers"
-
-    # - id: "Qwen/Qwen-Image"
-    #   owned_by: "huggingface"
-    #   type: "image"
-    #   backend: "qwen"
+    # Embedding Models
+    - id: "sentence-transformers/all-MiniLM-L6-v2"
+      owned_by: "sentence-transformers"
+      type: "embedding"
 
 # Open WebUI Configuration & Local Database Folder
 webui:

@@ -17,7 +17,7 @@ class MFluxPipeline(BaseImagePipeline):
         # self.pipe = MFlux(...)
         raise NotImplementedError("mflux backend is not fully implemented yet.")
 
-    def generate(self, prompt: str, negative_prompt: Optional[str] = None, width: int = 1024, height: int = 1024, num_inference_steps: int = 8, guidance_scale: float = 2.0) -> Any:
+    def generate(self, prompt: str, negative_prompt: Optional[str] = None, width: int = 1024, height: int = 1024, num_inference_steps: int = 8, guidance_scale: float = 2.0, seed: Optional[int] = None) -> Any:
         raise NotImplementedError("mflux backend generation is not fully implemented.")
 
     def unload(self):

@@ -121,7 +121,10 @@ dependencies = [
     { name = "httpx" },
     { name = "huggingface-hub" },
     { name = "imageio-ffmpeg" },
+    { name = "ltx-core-mlx" },
+    { name = "ltx-pipelines-mlx" },
     { name = "mflux" },
+    { name = "mlx-arsenal" },
     { name = "mlx-lm" },
     { name = "mlx-vlm", version = "0.4.4", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
     { name = "mlx-vlm", version = "0.6.4", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux'" },
@@ -155,7 +158,10 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "huggingface-hub", specifier = ">=0.21.0" },
     { name = "imageio-ffmpeg", specifier = ">=0.4.9" },
+    { name = "ltx-core-mlx", editable = "third_party/ltx-2-mlx/packages/ltx-core-mlx" },
+    { name = "ltx-pipelines-mlx", editable = "third_party/ltx-2-mlx/packages/ltx-pipelines-mlx" },
     { name = "mflux", specifier = ">=0.4.0" },
+    { name = "mlx-arsenal", specifier = ">=0.10.0" },
     { name = "mlx-lm", specifier = ">=0.18.0" },
     { name = "mlx-vlm", specifier = ">=0.1.0" },
     { name = "mlx-whisper", specifier = ">=0.2.0" },
@@ -2138,6 +2144,49 @@ wheels = [
 ]
 
 [[package]]
+name = "ltx-core-mlx"
+version = "0.14.19"
+source = { editable = "third_party/ltx-2-mlx/packages/ltx-core-mlx" }
+dependencies = [
+    { name = "huggingface-hub" },
+    { name = "mlx", version = "0.31.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
+    { name = "mlx", version = "0.31.2", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux'" },
+    { name = "mlx-arsenal" },
+    { name = "mlx-lm" },
+    { name = "numpy" },
+    { name = "safetensors" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "huggingface-hub", specifier = ">=0.26.0" },
+    { name = "mlx", specifier = ">=0.31.0" },
+    { name = "mlx-arsenal", specifier = ">=0.2.4" },
+    { name = "mlx-lm", specifier = ">=0.31.0" },
+    { name = "numpy", specifier = ">=1.26.0" },
+    { name = "safetensors", specifier = ">=0.4.0" },
+]
+
+[[package]]
+name = "ltx-pipelines-mlx"
+version = "0.14.19"
+source = { editable = "third_party/ltx-2-mlx/packages/ltx-pipelines-mlx" }
+dependencies = [
+    { name = "ltx-core-mlx" },
+    { name = "mlx-arsenal" },
+    { name = "pillow" },
+    { name = "tqdm" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "ltx-core-mlx", editable = "third_party/ltx-2-mlx/packages/ltx-core-mlx" },
+    { name = "mlx-arsenal", specifier = ">=0.2.4" },
+    { name = "pillow", specifier = ">=10.4.0" },
+    { name = "tqdm", specifier = ">=4.66.0" },
+]
+
+[[package]]
 name = "lxml"
 version = "6.1.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2367,6 +2416,20 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/94/89/1e77ec3ff380e8fb9e7258047374d31452a0f9828a0e370f127b07dd8288/mlx-0.31.2-cp311-cp311-macosx_14_0_arm64.whl", hash = "sha256:4a3f181b367d404e44a6bd68ef5eb573930809ac60cacd51d0c851c629b1b651", size = 586911, upload-time = "2026-04-22T03:14:29.675Z" },
     { url = "https://files.pythonhosted.org/packages/6a/41/c1907f05f8a3fc54025fb78ad68d3c4a4b931664d03c0a24f7f431cc4087/mlx-0.31.2-cp311-cp311-macosx_15_0_arm64.whl", hash = "sha256:70297cbef7479429f69c966bfed10da20a6f0c2aa997eec2b4f6ba1a07caf2ef", size = 586915, upload-time = "2026-04-22T03:14:31.403Z" },
     { url = "https://files.pythonhosted.org/packages/97/b0/61ac2c14773c786fecbda28067b0207a0c654cb4d10c548808c51284d700/mlx-0.31.2-cp311-cp311-macosx_26_0_arm64.whl", hash = "sha256:c0ff158b7ac93a4b5659adbc70053498b30a5964fc45f78596398e056a96c36a", size = 587030, upload-time = "2026-04-22T03:14:32.961Z" },
+]
+
+[[package]]
+name = "mlx-arsenal"
+version = "0.10.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "mlx", version = "0.31.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
+    { name = "mlx", version = "0.31.2", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux'" },
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3e/b4/60ae193428a97cbaa8c409df4b7089aadf334f40c786a575feb38c5f9be2/mlx_arsenal-0.10.1.tar.gz", hash = "sha256:380dc1d56c3933ee57fc52ebd6424d8bcfa605834bafbb5346b63a085f320f99", size = 93024, upload-time = "2026-07-17T16:11:21.807Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7b/8c/1b2c31a3d936ea97c8f78e0f0f2fe6dd59b594095c47627a4c8be4c8d9f5/mlx_arsenal-0.10.1-py3-none-any.whl", hash = "sha256:0bd382991f2b448b2f57e7bd0971f98ab800a5e6d2b1cc4278d4842c8ffcc91e", size = 76800, upload-time = "2026-07-17T16:11:20.465Z" },
 ]
 
 [[package]]

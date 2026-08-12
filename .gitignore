@@ -1,3 +1,11 @@
+# macOS metadata and Finder files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+**/.DS_Store
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -222,3 +230,4 @@ data/
 notebook_data/
 surreal_data/
 output/
+third_party/

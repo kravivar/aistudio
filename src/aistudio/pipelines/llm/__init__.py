@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import AsyncGenerator, Dict, Any, List, Optional
 from aistudio.config import resolve_model_path, get_model_config
 from aistudio.utils.logging import logger
+from aistudio.pipelines.base import BasePipeline
 import re
 
 def clean_response(text: str, strip_whitespace: bool = False) -> str:
@@ -25,7 +26,6 @@ def clean_response(text: str, strip_whitespace: bool = False) -> str:
     for stop_token in stop_tokens:
         if stop_token in text:
             text = text.split(stop_token)[0]
-
     return text.strip() if strip_whitespace else text
 
 
@@ -56,9 +56,11 @@ def prepare_messages_for_template(messages: List[Dict[str, str]]) -> List[Dict[s
             
     return cleaned_messages or [{"role": "user", "content": ""}]
 
-class LLMPipeline:
+class LLMPipeline(BasePipeline):
+    pipeline_type = "llm"
+
     def __init__(self):
-        self.current_model_id: Optional[str] = None
+        super().__init__()
         self.model = None
         self.tokenizer = None
         # Set True when apply_chat_template(enable_thinking=True) appended <think> to the
@@ -69,6 +71,14 @@ class LLMPipeline:
     def load_model(self, model_id: str):
         if self.current_model_id == model_id and self.model is not None:
             return
+        
+        from aistudio.config import detect_model_type
+        mtype = detect_model_type(model_id)
+        if mtype in ("video", "image", "diffusion", "audio", "embedding"):
+            raise RuntimeError(
+                f"Model '{model_id}' is configured as a {mtype} model, not a Large Language Model (LLM). "
+                f"Please use the corresponding /v1/{mtype}/generations endpoint."
+            )
         
         real_path = resolve_model_path(model_id)
         resolved = Path(real_path)
@@ -151,7 +161,7 @@ class LLMPipeline:
                     return "\n".join([f"{m.get('role', 'user')}: {m.get('content', '')}" for m in sanitized])
         return "\n".join([f"{m.get('role', 'user')}: {m.get('content', '')}" for m in messages])
 
-    def generate(self, model_id: str, messages: List[Dict[str, str]], max_tokens: int = 512, temperature: float = 0.7, thinking_mode: Optional[str] = None) -> Dict[str, Any]:
+    def generate(self, model_id: str, messages: List[Dict[str, str]], max_tokens: int = 512, temperature: float = 0.7, thinking_mode: Optional[str] = None, seed: Optional[int] = None) -> Dict[str, Any]:
         self.load_model(model_id)
 
         import mlx_lm
@@ -165,6 +175,11 @@ class LLMPipeline:
             "max_tokens": max_tokens,
             "verbose": False
         }
+        
+        if seed is not None:
+            import mlx.core as mx
+            mx.random.seed(seed)
+            
         if context_size is not None:
             kwargs["max_kv_size"] = int(context_size)
 
@@ -203,7 +218,7 @@ class LLMPipeline:
             }
         }
 
-    async def generate_stream(self, model_id: str, messages: List[Dict[str, str]], max_tokens: int = 512, temperature: float = 0.7, thinking_mode: Optional[str] = None) -> AsyncGenerator[bytes, None]:
+    async def generate_stream(self, model_id: str, messages: List[Dict[str, str]], max_tokens: int = 512, temperature: float = 0.7, thinking_mode: Optional[str] = None, seed: Optional[int] = None) -> AsyncGenerator[bytes, None]:
         """
         Streams chat completions.
 
@@ -232,6 +247,10 @@ class LLMPipeline:
             return f"data: {json.dumps(data)}\n\n".encode("utf-8")
 
         try:
+            if seed is not None:
+                import mlx.core as mx
+                mx.random.seed(seed)
+                
             if hasattr(mlx_lm, "stream_generate"):
                 # If the prompt template injected <think> as a suffix, the model output
                 # contains the thinking content ending with </think> but NO opening <think>.
@@ -259,8 +278,8 @@ class LLMPipeline:
                     yield _make_chunk(full_text)
                 else:
                     # ── STREAM MODE (default) ────────────────────────────────────────────
-                    # Stream tokens directly as they arrive.
                     import asyncio
+                    from aistudio.pipelines.llm.thinking_filters import get_filter_for_model
                     
                     cfg = get_model_config(model_id)
                     context_size = cfg.get("context_size")
@@ -268,19 +287,70 @@ class LLMPipeline:
                     if context_size is not None:
                         kwargs["max_kv_size"] = int(context_size)
                         
+                    thinking_filter = get_filter_for_model(model_id)
+                    logger.info(f"Using thinking filter: {thinking_filter.name} for model {model_id}")
+                    
+                    has_opened_think = bool(self._prompt_has_think_prefix)
+                    buffer = ""
+                    
                     for response in mlx_lm.stream_generate(self.model, self.tokenizer, **kwargs):
                         token_text = clean_response(
                             getattr(response, "text", str(response)), strip_whitespace=False
                         )
                         if not token_text:
                             continue
-                        # Prepend <think> before the first token if the prompt injected it
-                        if self._prompt_has_think_prefix and not think_prefix_emitted:
-                            think_prefix_emitted = True
-                            yield _make_chunk("<think>\n" + token_text)
-                        else:
-                            yield _make_chunk(token_text)
+                            
+                        buffer += token_text
+                        
+                        # Delegate tag detection/replacement to the model-specific filter
+                        result = thinking_filter.detect_and_replace_tags(buffer, has_opened_think)
+                        buffer = result.buffer
+                        has_opened_think = result.has_opened_think
+                        
+                        # Clean stray words (shared logic from the filter)
+                        buffer = thinking_filter.clean_stray_words(buffer)
+
+                        # Hold incomplete <... tags at end of buffer
+                        safe_to_yield = buffer
+                        remaining_buffer = ""
+                        
+                        last_open = buffer.rfind("<")
+                        last_close = buffer.rfind(">")
+                        
+                        if last_open != -1 and last_open > last_close:
+                            if len(buffer) - last_open < 30:
+                                safe_to_yield = buffer[:last_open]
+                                remaining_buffer = buffer[last_open:]
+                                
+                        # Hold <think>\n or </think>\n at end (and any trailing letters/spaces) 
+                        # so next chunk can absorb stray words that might be split across chunks.
+                        match = re.search(r"(</?think>\n\s*[a-zA-Z]*)$", safe_to_yield, re.IGNORECASE)
+                        if match:
+                            tail = match.group(1)
+                            remaining_buffer = tail + remaining_buffer
+                            safe_to_yield = safe_to_yield[:-len(tail)]
+                                
+                        buffer = remaining_buffer
+                        
+                        if safe_to_yield:
+                            if self._prompt_has_think_prefix and not think_prefix_emitted:
+                                think_prefix_emitted = True
+                                yield _make_chunk("<think>\n" + safe_to_yield)
+                            else:
+                                yield _make_chunk(safe_to_yield)
+                                
                         await asyncio.sleep(0)
+                        
+                    # Safety net: if model never emitted a closing tag, force-close
+                    if has_opened_think:
+                        buffer += "</think>\n"
+                        has_opened_think = False
+                        
+                    if buffer:
+                        if self._prompt_has_think_prefix and not think_prefix_emitted:
+                            yield _make_chunk("<think>\n" + buffer)
+                        else:
+                            yield _make_chunk(buffer)
             else:
                 raw_response = mlx_lm.generate(
                     self.model,

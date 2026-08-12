@@ -6,15 +6,18 @@ from pathlib import Path
 
 from aistudio.config import resolve_model_path, get_model_config
 from aistudio.utils.logging import logger
+from aistudio.pipelines.base import BasePipeline
 from .base import BaseImagePipeline
 from .diffusers_backend import DiffusersPipeline
 from .mflux_backend import MFluxPipeline
 
-class ImagePipelineManager:
+class ImagePipelineManager(BasePipeline):
+    pipeline_type = "image"
+
     def __init__(self):
+        super().__init__()
         self.active_backend: Optional[BaseImagePipeline] = None
         self.active_backend_name: Optional[str] = None
-        self.current_model_id: Optional[str] = None
 
     def _get_backend_class(self, backend_name: str):
         if backend_name == "mflux":
@@ -69,7 +72,8 @@ class ImagePipelineManager:
         size: str = "1024x1024",
         num_inference_steps: int = 8,
         guidance_scale: float = 2.0,
-        response_format: str = "b64_json"
+        response_format: str = "b64_json",
+        seed: Optional[int] = None
     ) -> Dict[str, Any]:
         self.load_pipeline(model_id)
 
@@ -86,7 +90,8 @@ class ImagePipelineManager:
                 width=width,
                 height=height,
                 num_inference_steps=num_inference_steps,
-                guidance_scale=guidance_scale
+                guidance_scale=guidance_scale,
+                seed=seed
             )
             
             buffered = io.BytesIO()
@@ -97,7 +102,8 @@ class ImagePipelineManager:
                 b64_str = base64.b64encode(img_bytes).decode("utf-8")
                 images_data.append({"b64_json": b64_str})
             else:
-                out_dir = Path("./output/images")
+                from aistudio.config import OUTPUT_DIR
+                out_dir = OUTPUT_DIR / "images"
                 out_dir.mkdir(parents=True, exist_ok=True)
                 file_path = out_dir / f"gen_{int(time.time())}_{i}.png"
                 image.save(file_path)

@@ -31,7 +31,22 @@ def test_get_model_config():
     assert cfg.get("max_tokens") == 8192
     assert cfg.get("thinking_mode") == "stream"
 
-    cfg_gemma = get_model_config("mlx-community/gemma-2-9b-it-4bit")
-    assert cfg_gemma.get("max_tokens") == 2048
-    assert cfg_gemma.get("thinking_mode") == "off"
+    cfg_gemma = get_model_config("mlx-community/gemma-4-31b-it-8bit")
+    assert cfg_gemma.get("max_tokens") == 8192
+    assert cfg_gemma.get("context_size") == 32768
+
+def test_default_model_resolution():
+    from aistudio.config import DEFAULT_MODEL
+    assert isinstance(DEFAULT_MODEL, str)
+    assert len(DEFAULT_MODEL) > 0
+
+def test_aistudio_home_paths():
+    from aistudio.config import AISTUDIO_HOME, DATA_DIR, OUTPUT_DIR, LOG_FILE
+    assert AISTUDIO_HOME.name == "aistudio"
+    assert "Document" in str(AISTUDIO_HOME) or "aistudio" in str(AISTUDIO_HOME)
+    assert DATA_DIR.parent.name == "aistudio" or DATA_DIR.name == "webui"
+    assert OUTPUT_DIR.name == "output"
+    assert LOG_FILE.name == "server.log"
+
+
 

@@ -3,10 +3,25 @@ import gc
 from typing import Dict, Any, Optional
 from aistudio.config import resolve_model_path
 from aistudio.utils.logging import logger
+from aistudio.pipelines.base import BasePipeline
 
-class AudioPipeline:
+class AudioPipeline(BasePipeline):
+    pipeline_type = "audio"
+
     def __init__(self):
-        self.current_model_id: Optional[str] = None
+        super().__init__()
+
+    def unload(self):
+        """Release audio pipeline resources from memory."""
+        logger.info("Unloading audio pipeline resources...")
+        self.current_model_id = None
+        gc.collect()
+        try:
+            import mlx.core as mx
+            mx.metal.clear_cache()
+        except Exception:
+            pass
+        logger.info("Audio pipeline unloaded.")
 
     def transcribe(
         self,

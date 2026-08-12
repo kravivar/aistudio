@@ -5,7 +5,7 @@ import subprocess
 import uvicorn
 from pathlib import Path
 from dotenv import load_dotenv
-from aistudio.config import APP_CONFIG, DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE, DEFAULT_THINKING_MODE
+from aistudio.config import APP_CONFIG, DEFAULT_MODEL, DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE, DEFAULT_THINKING_MODE, AISTUDIO_HOME, DATA_DIR
 
 load_dotenv()
 
@@ -80,6 +80,8 @@ def patch_open_webui_db(data_dir: Path, api_port: int = 8000):
                             "audio.tts.voice": '"default"',
                             "audio.tts.model": '"tts-1"',
                             "audio.tts.split_on": '""',
+                            "default_models": json.dumps(DEFAULT_MODEL),
+                            "ui.default_models": json.dumps(DEFAULT_MODEL),
                             # Force legacy function calling so Open WebUI executes forced RAG web search for custom model endpoints
                             # thinking_mode and max_tokens sourced from config.yml generation: section
                             "models.default_params": json.dumps({
@@ -133,10 +135,10 @@ def patch_open_webui_db(data_dir: Path, api_port: int = 8000):
                                         if not cursor.fetchone():
                                             cursor.execute(
                                                 "INSERT INTO function (id, user_id, name, type, content, meta, valves, is_active, is_global, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                                                (func_id, "", name, func_type, content, "{}", "{}", True, True, int(time.time()), int(time.time()))
+                                                (func_id, "", name, func_type, content, "{}", "{}", 1, 1, int(time.time()), int(time.time()))
                                             )
                                         else:
-                                            cursor.execute("UPDATE function SET content = ?, name = ?, type = ?, updated_at = ? WHERE id = ?", (content, name, func_type, int(time.time()), func_id))
+                                            cursor.execute("UPDATE function SET content = ?, name = ?, type = ?, is_active = 1, is_global = 1, updated_at = ? WHERE id = ?", (content, name, func_type, int(time.time()), func_id))
 
                         conn.commit()
                         print(f"✅ Auto-configured Web Search (SearXNG) & PDF Image OCR in Open WebUI DB at {db_path}")
@@ -151,8 +153,18 @@ def launch_webui(api_port: int, webui_port: int = 3000):
     server_cfg = APP_CONFIG.get("server", {})
     webui_cfg = APP_CONFIG.get("webui", {})
     webui_port = webui_cfg.get("port", webui_port)
-    data_dir_str = webui_cfg.get("data_dir", "./data/webui")
-    data_dir = Path(data_dir_str).resolve()
+    data_dir_str = webui_cfg.get("data_dir")
+    
+    if data_dir_str:
+        if data_dir_str.startswith("~"):
+            data_dir = Path(data_dir_str).expanduser().resolve()
+        elif data_dir_str.startswith("."):
+            data_dir = (AISTUDIO_HOME / data_dir_str.strip("./")).resolve()
+        else:
+            data_dir = Path(data_dir_str).resolve()
+    else:
+        data_dir = DATA_DIR
+        
     data_dir.mkdir(parents=True, exist_ok=True)
     patch_open_webui_db(data_dir, api_port)
 
@@ -178,6 +190,7 @@ def launch_webui(api_port: int, webui_port: int = 3000):
 
     env["DEFAULT_USER_ROLE"] = "admin"
     env["WEBUI_DEFAULT_USER_ROLE"] = "admin"
+    env["DEFAULT_MODELS"] = DEFAULT_MODEL
     env["WEBUI_NAME"] = str(webui_cfg.get("name", os.getenv("WEBUI_NAME", "AI Studio")))
     env["ADMIN_EMAIL"] = str(webui_cfg.get("admin_email", os.getenv("ADMIN_EMAIL", "admin@aistudio.local")))
     env["ADMIN_PASSWORD"] = str(webui_cfg.get("admin_password", os.getenv("ADMIN_PASSWORD", "adminpassword123")))
@@ -220,8 +233,18 @@ def launch_webui(api_port: int, webui_port: int = 3000):
     env["IMAGES_OPENAI_API_BASE_URL"] = f"http://localhost:{api_port}/v1"
 
     # Locate Open WebUI frontend build directory dynamically
-    import open_webui
-    frontend_dir = Path(open_webui.__file__).parent / "frontend"
+    import sys
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS') or '__compiled__' in globals():
+        # Running as compiled Nuitka binary inside macOS App Bundle
+        # Executable is at AI Studio.app/Contents/MacOS/main
+        # We need to point to AI Studio.app/Contents/Resources/open_webui/frontend
+        executable_path = Path(sys.executable)
+        frontend_dir = executable_path.parent.parent / "Resources" / "open_webui" / "frontend"
+    else:
+        # Running natively in dev mode
+        import open_webui
+        frontend_dir = Path(open_webui.__file__).parent / "frontend"
+        
     env["FRONTEND_BUILD_DIR"] = str(frontend_dir)
 
     # Update os.environ so Open WebUI picks up the settings natively
@@ -289,6 +312,28 @@ def main():
             time.sleep(1)
             
         print("✅ Servers ready! Starting PyWebView Desktop Window...")
+        
+        # --- PYWEBVIEW MACOS MICROPHONE PERMISSION PATCH ---
+        # By default, pywebview's WKUIDelegate does not implement requestMediaCapturePermissionFor...
+        # which causes macOS 12+ to silently deny microphone requests, breaking Voice Mode.
+        # We monkey-patch the PyObjC class at runtime before starting the webview!
+        try:
+            from webview.platforms import cocoa
+            import objc
+            
+            def webView_requestMediaCapturePermissionForOrigin_initiatedByFrame_type_decisionHandler_(self, webview, origin, frame, captureType, decisionHandler):
+                # WKPermissionDecisionGrant = 1
+                decisionHandler(1)
+                
+            cocoa.BrowserView.BrowserDelegate.webView_requestMediaCapturePermissionForOrigin_initiatedByFrame_type_decisionHandler_ = objc.selector(
+                webView_requestMediaCapturePermissionForOrigin_initiatedByFrame_type_decisionHandler_,
+                signature=b"v@:@@@q@"
+            )
+            print("🎤 Voice Mode permissions patched successfully!")
+        except Exception as e:
+            print(f"⚠️ Could not patch microphone permissions: {e}")
+        # ---------------------------------------------------
+        
         webview.create_window("AI Studio", url, text_select=True)
         webview.start()
     else:

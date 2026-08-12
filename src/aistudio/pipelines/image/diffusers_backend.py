@@ -31,7 +31,7 @@ class DiffusersPipeline(BaseImagePipeline):
         from diffusers import StableDiffusionXLPipeline
 
         device = "mps" if torch.backends.mps.is_available() else "cpu"
-        torch_dtype = torch.float16 if device == "mps" else torch.float32
+        torch_dtype = torch.bfloat16 if device == "mps" else torch.float32
 
         if resolved_path.endswith(".safetensors"):
             if self._is_lora_safetensors(resolved_path):
@@ -55,14 +55,16 @@ class DiffusersPipeline(BaseImagePipeline):
             self.pipe = StableDiffusionXLPipeline.from_pretrained(
                 resolved_path,
                 torch_dtype=torch_dtype,
-                use_safetensors=True,
             )
 
         self.pipe.to(device)
         self.current_model_id = model_id
         logger.info(f"Diffusers pipeline loaded successfully on {device}")
 
-    def generate(self, prompt: str, negative_prompt: Optional[str] = None, width: int = 1024, height: int = 1024, num_inference_steps: int = 8, guidance_scale: float = 2.0) -> Any:
+    def generate(self, prompt: str, negative_prompt: Optional[str] = None, width: int = 1024, height: int = 1024, num_inference_steps: int = 8, guidance_scale: float = 2.0, seed: Optional[int] = None) -> Any:
+        import torch
+        device = "mps" if torch.backends.mps.is_available() else "cpu"
+        
         kwargs = {
             "prompt": prompt,
             "width": width,
@@ -72,6 +74,12 @@ class DiffusersPipeline(BaseImagePipeline):
         }
         if negative_prompt:
             kwargs["negative_prompt"] = negative_prompt
+            
+        if seed is not None:
+            generator = torch.Generator(device=device)
+            generator.manual_seed(seed)
+            kwargs["generator"] = generator
+            
         return self.pipe(**kwargs).images[0]
 
     def unload(self):
