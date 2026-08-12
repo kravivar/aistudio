@@ -25,16 +25,18 @@ def load_yaml_config() -> tuple[dict, Optional[Path]]:
     Finds and loads config.yml.
     Priority:
       1. ./config.yml or ./config.yaml (if present in current directory, use that)
-      2. ~/Document/aistudio/config.yml or config.yaml (default fallback)
-      3. ~/Documents/aistudio/config.yml or config.yaml
+      2. ~/Documents/aistudio/config.yml or ~/Document/aistudio/config.yml (default fallback)
+      3. If neither exists, creates ~/Documents/aistudio/config.yml by copying config.default.yml.
     """
+    import shutil
+
     search_locations = [
         Path("config.yml").resolve(),
         Path("config.yaml").resolve(),
-        Path.home() / "Document" / "aistudio" / "config.yml",
-        Path.home() / "Document" / "aistudio" / "config.yaml",
         Path.home() / "Documents" / "aistudio" / "config.yml",
         Path.home() / "Documents" / "aistudio" / "config.yaml",
+        Path.home() / "Document" / "aistudio" / "config.yml",
+        Path.home() / "Document" / "aistudio" / "config.yaml",
         DEFAULT_AISTUDIO_HOME / "config.yml",
         DEFAULT_AISTUDIO_HOME / "config.yaml",
     ]
@@ -45,6 +47,27 @@ def load_yaml_config() -> tuple[dict, Optional[Path]]:
                     return yaml.safe_load(f) or {}, config_path
             except Exception:
                 pass
+
+    # If neither ./config.yml nor ~/Documents/aistudio/config.yml exists,
+    # copy config.default.yml to ~/Documents/aistudio/config.yml and start
+    target_config = DEFAULT_AISTUDIO_HOME / "config.yml"
+    default_candidates = [
+        Path("config.default.yml").resolve(),
+        Path("config.default.yaml").resolve(),
+        Path(__file__).parent.parent.parent / "config.default.yml",
+        Path(__file__).parent.parent.parent / "config.default.yaml",
+        Path("config.example.yml").resolve(),
+    ]
+    for def_path in default_candidates:
+        if def_path.exists() and def_path.is_file():
+            try:
+                target_config.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(def_path, target_config)
+                with open(target_config, "r", encoding="utf-8") as f:
+                    return yaml.safe_load(f) or {}, target_config
+            except Exception:
+                pass
+
     return {}, None
 
 APP_CONFIG, CONFIG_FILE_PATH = load_yaml_config()
