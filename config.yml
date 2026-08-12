@@ -6,6 +6,9 @@ server:
   port: 3001
   api_key: "local-sk-key"
   default_model: "mlx-community/Qwen3.6-35B-A3B-4bit"
+  output_dir: "~/Documents/aistudio/output"
+  log_file: "~/Documents/aistudio/server.log"
+  models_dir: "~/Documents/aistudio/models"
   # hf_home: "../mlx_local_llm/models"
   default_models:
     # Image Models
@@ -91,7 +94,7 @@ server:
 # Open WebUI Configuration & Local Database Folder
 webui:
   port: 3000
-  data_dir: "./data/webui"
+  data_dir: "~/Documents/aistudio/data/webui"
   auth: false
   enable_signup: false
   enable_ollama_api: false

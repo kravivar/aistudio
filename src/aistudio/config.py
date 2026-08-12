@@ -7,60 +7,79 @@ import yaml
 # Load environment variables from .env if present
 load_dotenv()
 
-def get_aistudio_home() -> Path:
+def get_default_aistudio_home() -> Path:
     """
-    Determines the base directory for AI Studio (configs, data, outputs, logs).
-    Priority:
-      1. AI_STUDIO_HOME environment variable
-      2. ~/Document/aistudio if ~/Document exists
-      3. ~/Documents/aistudio
+    Returns default home directory for AI Studio (~/Document/aistudio or ~/Documents/aistudio).
     """
     if os.getenv("AI_STUDIO_HOME"):
         return Path(os.getenv("AI_STUDIO_HOME")).expanduser().resolve()
-    
     home = Path.home()
     if (home / "Document").exists() and not (home / "Documents").exists():
         return (home / "Document" / "aistudio").resolve()
     return (home / "Documents" / "aistudio").resolve()
 
-AISTUDIO_HOME: Path = get_aistudio_home()
-DATA_DIR: Path = AISTUDIO_HOME / "data" / "webui"
-OUTPUT_DIR: Path = AISTUDIO_HOME / "output"
-LOG_FILE: Path = AISTUDIO_HOME / "server.log"
+DEFAULT_AISTUDIO_HOME: Path = get_default_aistudio_home()
 
-# Ensure essential directories exist
+def load_yaml_config() -> tuple[dict, Optional[Path]]:
+    """
+    Finds and loads config.yml.
+    Priority:
+      1. ./config.yml or ./config.yaml (if present in current directory, use that)
+      2. ~/Document/aistudio/config.yml or config.yaml (default fallback)
+      3. ~/Documents/aistudio/config.yml or config.yaml
+    """
+    search_locations = [
+        Path("config.yml").resolve(),
+        Path("config.yaml").resolve(),
+        Path.home() / "Document" / "aistudio" / "config.yml",
+        Path.home() / "Document" / "aistudio" / "config.yaml",
+        Path.home() / "Documents" / "aistudio" / "config.yml",
+        Path.home() / "Documents" / "aistudio" / "config.yaml",
+        DEFAULT_AISTUDIO_HOME / "config.yml",
+        DEFAULT_AISTUDIO_HOME / "config.yaml",
+    ]
+    for config_path in search_locations:
+        if config_path.exists() and config_path.is_file():
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    return yaml.safe_load(f) or {}, config_path
+            except Exception:
+                pass
+    return {}, None
+
+APP_CONFIG, CONFIG_FILE_PATH = load_yaml_config()
+_server_cfg = APP_CONFIG.get("server", {})
+_webui_cfg = APP_CONFIG.get("webui", {})
+_default_models = _server_cfg.get("default_models") or []
+
+# Base Home derived from config file location or default home
+AISTUDIO_HOME: Path = CONFIG_FILE_PATH.parent if CONFIG_FILE_PATH and "aistudio" in str(CONFIG_FILE_PATH) else DEFAULT_AISTUDIO_HOME
+
+def resolve_path_from_config(raw_path: Optional[str], default_path: Path) -> Path:
+    """
+    Resolves path string specified in config.yml (supporting ~ expansion and relative paths).
+    """
+    if not raw_path:
+        return default_path.resolve()
+    p = Path(raw_path).expanduser()
+    if not p.is_absolute() and CONFIG_FILE_PATH:
+        return (CONFIG_FILE_PATH.parent / p).resolve()
+    return p.resolve()
+
+# Path mappings defined in and loaded directly from config.yml
+OUTPUT_DIR: Path = resolve_path_from_config(_server_cfg.get("output_dir"), AISTUDIO_HOME / "output")
+LOG_FILE: Path = resolve_path_from_config(_server_cfg.get("log_file"), AISTUDIO_HOME / "server.log")
+DATA_DIR: Path = resolve_path_from_config(_webui_cfg.get("data_dir"), AISTUDIO_HOME / "data" / "webui")
+
+# Ensure directories exist
 try:
     AISTUDIO_HOME.mkdir(parents=True, exist_ok=True)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     (OUTPUT_DIR / "images").mkdir(parents=True, exist_ok=True)
     (OUTPUT_DIR / "video").mkdir(parents=True, exist_ok=True)
+    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 except Exception:
     pass
-
-def load_yaml_config() -> dict:
-    search_locations = [
-        AISTUDIO_HOME / "config.yml",
-        AISTUDIO_HOME / "config.yaml",
-        Path.home() / "Document" / "aistudio" / "config.yml",
-        Path.home() / "Document" / "aistudio" / "config.yaml",
-        Path.home() / "Documents" / "aistudio" / "config.yml",
-        Path.home() / "Documents" / "aistudio" / "config.yaml",
-        Path("config.yml").resolve(),
-        Path("config.yaml").resolve(),
-    ]
-    for config_path in search_locations:
-        if config_path.exists():
-            try:
-                with open(config_path, "r", encoding="utf-8") as f:
-                    return yaml.safe_load(f) or {}
-            except Exception:
-                pass
-    return {}
-
-APP_CONFIG = load_yaml_config()
-_server_cfg = APP_CONFIG.get("server", {})
-_webui_cfg = APP_CONFIG.get("webui", {})
-_default_models = _server_cfg.get("default_models") or []
 
 _configured_default_model = (
     _server_cfg.get("default_model")

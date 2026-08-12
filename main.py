@@ -71,6 +71,11 @@ def patch_open_webui_db(data_dir: Path, api_port: int = 8000):
                             "ui.enable_community_sharing": "false",
                             "ui.show_admin_details": "false",
                             "ui.default_user_role": '"admin"',
+                            "ui.show_changelog": "false",
+                            "ui.welcome_modal": "false",
+                            "ui.pending_user_overlay": "false",
+                            "banners": "[]",
+                            "notifications": "[]",
                             "ollama.enable": "false",
                             "ollama.base_urls": "[]",
                             # High-quality natural voice TTS configuration
@@ -95,11 +100,14 @@ def patch_open_webui_db(data_dir: Path, api_port: int = 8000):
                             cursor.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", (k, v))
                         
                         # Maintain single admin@localhost account required for WEBUI_AUTH=False auto-login
+                        # Pre-acknowledge onboarding and welcome popups so no blocking modals appear
                         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='user'")
                         if cursor.fetchone():
+                            admin_info = json.dumps({"onboarding_completed": True, "show_changelog": False, "welcome_modal_dismissed": True})
+                            admin_settings = json.dumps({"ui": {"show_changelog": False, "notifications": False, "theme": "dark"}})
                             cursor.execute("DELETE FROM user WHERE id NOT IN (SELECT min(id) FROM user WHERE email = 'admin@localhost') AND email != 'admin@localhost'")
                             cursor.execute("DELETE FROM user WHERE id NOT IN (SELECT min(id) FROM user WHERE email = 'admin@localhost')")
-                            cursor.execute("UPDATE user SET role = 'admin', email = 'admin@localhost' WHERE email = 'admin@localhost'")
+                            cursor.execute("UPDATE user SET role = 'admin', email = 'admin@localhost', info = ?, settings = ? WHERE email = 'admin@localhost'", (admin_info, admin_settings))
 
                         import time
                         import re
@@ -300,18 +308,37 @@ def main():
         
         webui_cfg = APP_CONFIG.get("webui", {})
         webui_port = webui_cfg.get("port", 3000)
+        api_port = args.port
         url = f"http://localhost:{webui_port}"
-        max_retries = 30
+        
+        # Dual-healthcheck gate: Wait until BOTH AI Studio (/v1/models) AND Open WebUI (/api/config) are responding
+        api_ready = False
+        webui_ready = False
+        max_retries = 40
+        
         for i in range(max_retries):
-            try:
-                response = urllib.request.urlopen(url)
-                if response.getcode() == 200:
-                    break
-            except urllib.error.URLError:
-                pass
-            time.sleep(1)
+            if not api_ready:
+                try:
+                    res = urllib.request.urlopen(f"http://localhost:{api_port}/v1/models", timeout=1)
+                    if res.getcode() == 200:
+                        api_ready = True
+                except Exception:
+                    pass
+
+            if not webui_ready:
+                try:
+                    res = urllib.request.urlopen(f"http://localhost:{webui_port}/api/config", timeout=1)
+                    if res.getcode() == 200:
+                        webui_ready = True
+                except Exception:
+                    pass
+
+            if api_ready and webui_ready:
+                break
+            time.sleep(0.5)
             
-        print("✅ Servers ready! Starting PyWebView Desktop Window...")
+        time.sleep(1)  # Allow frontend state and Svelte stores to settle
+        print("✅ Backend and WebUI APIs ready! Starting PyWebView Desktop Window...")
         
         # --- PYWEBVIEW MACOS MICROPHONE PERMISSION PATCH ---
         # By default, pywebview's WKUIDelegate does not implement requestMediaCapturePermissionFor...
@@ -333,9 +360,118 @@ def main():
         except Exception as e:
             print(f"⚠️ Could not patch microphone permissions: {e}")
         # ---------------------------------------------------
-        
-        webview.create_window("AI Studio", url, text_select=True)
-        webview.start()
+        import webview.menu as wm
+
+        class DesktopBridge:
+            def reload(self):
+                if window:
+                    window.evaluate_js("window.location.reload()")
+
+            def hard_refresh(self):
+                if window:
+                    window.load_url(url)
+
+        bridge = DesktopBridge()
+
+        window = webview.create_window(
+            "AI Studio",
+            url,
+            js_api=bridge,
+            text_select=True,
+            width=1280,
+            height=850,
+            min_size=(900, 600)
+        )
+
+        def inject_refresh_shortcuts():
+            js_code = """
+            (function() {
+                // 1. Suppress blocking synchronous alert() dialogs in WKWebView
+                window.alert = function(msg) {
+                    console.log('[AI Studio Alert Suppressed]', msg);
+                };
+
+                // 2. Pre-populate localStorage flags to suppress first-time onboarding popups
+                try {
+                    localStorage.setItem('version', '0.5.20');
+                    localStorage.setItem('changelog_version', '0.5.20');
+                    localStorage.setItem('show_changelog', 'false');
+                    localStorage.setItem('onboarding_completed', 'true');
+                    localStorage.setItem('welcome_modal_dismissed', 'true');
+                } catch (e) {}
+
+                // 3. Keyboard shortcut listener for Cmd+R, Ctrl+R, F5
+                window.addEventListener('keydown', function(e) {
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'r') {
+                        e.preventDefault();
+                        if (e.shiftKey) {
+                            window.location.href = window.location.origin;
+                        } else {
+                            window.location.reload();
+                        }
+                    }
+                    if (e.key === 'F5') {
+                        e.preventDefault();
+                        window.location.reload();
+                    }
+                });
+
+                // 4. Inject floating refresh button if not already present
+                if (!document.getElementById('aistudio-quick-refresh-btn')) {
+                    const btn = document.createElement('button');
+                    btn.id = 'aistudio-quick-refresh-btn';
+                    btn.innerHTML = '🔄 Refresh UI';
+                    btn.title = 'Refresh interface (Cmd+R)';
+                    btn.style.cssText = 'position:fixed;bottom:12px;right:16px;z-index:99999;padding:6px 12px;font-size:12px;font-weight:600;color:#e2e8f0;background:rgba(30,41,59,0.85);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.15);border-radius:20px;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.3);transition:all 0.2s ease;opacity:0.6;';
+                    btn.onmouseenter = () => { btn.style.opacity = '1'; btn.style.transform = 'scale(1.05)'; };
+                    btn.onmouseleave = () => { btn.style.opacity = '0.6'; btn.style.transform = 'scale(1)'; };
+                    btn.onclick = () => { window.location.reload(); };
+                    document.body.appendChild(btn);
+                }
+
+                // 5. Auto-dismiss any lingering modal backdrop or transient initial connection error toasts
+                setTimeout(() => {
+                    const closeBtns = document.querySelectorAll('button[aria-label="Close"], button.close-btn');
+                    closeBtns.forEach(btn => {
+                        if (btn.offsetParent !== null) btn.click();
+                    });
+
+                    const toasts = document.querySelectorAll('.toast, .toaster, [role="alert"], .alert');
+                    toasts.forEach(t => {
+                        if (t.innerText && (t.innerText.includes('Failed to fetch') || t.innerText.includes('Connection error') || t.innerText.includes('NetworkError'))) {
+                            t.remove();
+                        }
+                    });
+                }, 1200);
+            })();
+            """
+            try:
+                window.evaluate_js(js_code)
+            except Exception:
+                pass
+
+        window.events.loaded += inject_refresh_shortcuts
+
+        app_menu = [
+            wm.Menu('AI Studio', [
+                wm.MenuAction('About AI Studio', lambda: window.evaluate_js("alert('AI Studio - Apple Silicon Native Model Studio')")),
+                wm.MenuSeparator(),
+                wm.MenuAction('Quit AI Studio', lambda: window.destroy()),
+            ]),
+            wm.Menu('View', [
+                wm.MenuAction('Reload Page (Cmd+R)', lambda: window.evaluate_js("window.location.reload()")),
+                wm.MenuAction('Force Refresh & Clear State', lambda: window.load_url(url)),
+                wm.MenuSeparator(),
+                wm.MenuAction('Go Home', lambda: window.load_url(url)),
+                wm.MenuSeparator(),
+                wm.MenuAction('Toggle Fullscreen', lambda: window.toggle_fullscreen()),
+            ])
+        ]
+
+        try:
+            webview.start(menu=app_menu)
+        except Exception:
+            webview.start()
     else:
         # Keep main thread alive if no webview
         while True:

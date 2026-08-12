@@ -48,5 +48,13 @@ def test_aistudio_home_paths():
     assert OUTPUT_DIR.name == "output"
     assert LOG_FILE.name == "server.log"
 
+def test_load_yaml_config_priority():
+    from aistudio.config import load_yaml_config, CONFIG_FILE_PATH
+    cfg, path = load_yaml_config()
+    assert isinstance(cfg, dict)
+    assert path is not None
+    assert path.name in ("config.yml", "config.yaml")
+
+
 
 
