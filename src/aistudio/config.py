@@ -92,6 +92,8 @@ def resolve_path_from_config(raw_path: Optional[str], default_path: Path) -> Pat
 # Path mappings defined in and loaded directly from config.yml
 OUTPUT_DIR: Path = resolve_path_from_config(_server_cfg.get("output_dir"), AISTUDIO_HOME / "output")
 LOG_FILE: Path = resolve_path_from_config(_server_cfg.get("log_file"), AISTUDIO_HOME / "server.log")
+LOG_LEVEL: str = _server_cfg.get("log_level", "DEBUG").upper()
+WORKERS: int = int(_server_cfg.get("workers", 1))
 DATA_DIR: Path = resolve_path_from_config(_webui_cfg.get("data_dir"), AISTUDIO_HOME / "data" / "webui")
 
 # Ensure directories exist

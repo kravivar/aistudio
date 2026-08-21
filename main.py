@@ -5,7 +5,7 @@ import subprocess
 import uvicorn
 from pathlib import Path
 from dotenv import load_dotenv
-from aistudio.config import APP_CONFIG, DEFAULT_MODEL, DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE, DEFAULT_THINKING_MODE, AISTUDIO_HOME, DATA_DIR
+from aistudio.config import APP_CONFIG, DEFAULT_MODEL, DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE, DEFAULT_THINKING_MODE, AISTUDIO_HOME, DATA_DIR, LOG_LEVEL, WORKERS
 
 load_dotenv()
 
@@ -479,7 +479,7 @@ def launch_webui(api_port: int, webui_port: int = 3000):
         webui_app.routes.insert(0, route2)
         webui_app.routes.insert(0, route1)
 
-        uvicorn.run(webui_app, host="0.0.0.0", port=webui_port, log_level="warning")
+        uvicorn.run(webui_app, host="0.0.0.0", port=webui_port, log_level=LOG_LEVEL.lower())
 
         
     t = threading.Thread(target=run_webui, daemon=True)
@@ -494,10 +494,23 @@ def main():
     parser.add_argument("--host", type=str, default=default_host, help="Host address to bind")
     parser.add_argument("--port", type=int, default=default_port, help="Port to listen on")
     parser.add_argument("--reload", action="store_true", help="Enable auto-reload for development")
-    parser.add_argument("--webui", action="store_true", help="Launch Open WebUI backend (access via browser at http://localhost:3000)")
-    parser.add_argument("--nativeui", action="store_true", help="Launch Open WebUI and open the native macOS desktop window")
+    parser.add_argument("--webui", action="store_true", help="Launch Open WebUI backend (no native window)")
+    parser.add_argument("--nativeui", action="store_true", help="Launch Open WebUI and open the native macOS desktop window (Default)")
+    parser.add_argument("--api-only", action="store_true", help="Run only the API server (disables WebUI and Native UI)")
 
     args = parser.parse_args()
+
+    # Determine UI modes
+    use_nativeui = True
+    use_webui = True
+
+    if args.api_only:
+        use_nativeui = False
+        use_webui = False
+    elif args.webui and not args.nativeui:
+        # Explicitly requested webui only
+        use_nativeui = False
+        use_webui = True
 
     import threading
     import time
@@ -506,15 +519,15 @@ def main():
     def run_backend():
         # Import inside thread to avoid block
         import uvicorn
-        uvicorn.run("aistudio.server.app:app", host=args.host, port=args.port, reload=args.reload)
+        uvicorn.run("aistudio.server.app:app", host=args.host, port=args.port, reload=args.reload, log_level=LOG_LEVEL.lower(), workers=WORKERS)
         
     t = threading.Thread(target=run_backend, daemon=True)
     t.start()
 
-    if args.webui or args.nativeui:
+    if use_webui:
         launch_webui(api_port=args.port)
         
-    if args.nativeui:
+    if use_nativeui:
         # Wait for Open WebUI to fully bind and respond before opening the GUI
         print("🖥️  Waiting for Open WebUI to initialize...")
         import webview

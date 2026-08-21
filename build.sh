@@ -49,6 +49,7 @@ yes | nuitka \
     --standalone \
     --macos-create-app-bundle \
     --macos-app-name="AI Studio" \
+    --output-folder-name="AI Studio" \
     --macos-app-version="0.1.0" \
     --macos-app-protected-resource="NSMicrophoneUsageDescription:AI Studio requires microphone access for Voice Mode." \
     --include-package=open_webui \
@@ -59,13 +60,24 @@ yes | nuitka \
     --include-package=mflux \
     --include-package=fastapi \
     --include-package=uvicorn \
+    --include-package=langchain_community \
+    --include-package=langchain_core \
+    --include-package=langchain_text_splitters \
+    --include-package=langchain \
+    --include-package=chromadb \
+    --include-package-data=open_webui \
     --include-data-dir=src/aistudio/webui_tools=src/aistudio/webui_tools \
     --noinclude-data-files="*/open_webui/frontend/*" \
     main.py
 
-echo "📦 Injecting Open WebUI Frontend assets..."
+echo "📦 Injecting Open WebUI Frontend assets and Alembic Migrations..."
 mkdir -p "AI Studio.app/Contents/Resources/open_webui/frontend"
 cp -r "$SITE_PACKAGES/open_webui/frontend/" "AI Studio.app/Contents/Resources/open_webui/frontend/"
+
+# Open WebUI relies on Alembic, which needs raw .py files for migrations on disk
+mkdir -p "AI Studio.app/Contents/MacOS/open_webui/migrations"
+cp -r "$SITE_PACKAGES/open_webui/migrations/" "AI Studio.app/Contents/MacOS/open_webui/migrations/"
+cp "$SITE_PACKAGES/open_webui/alembic.ini" "AI Studio.app/Contents/MacOS/open_webui/"
 
 # Remove the mock codesign from PATH so we can use the real one
 export PATH=$(echo $PATH | sed -e "s|$PWD/.mock_bin:||")

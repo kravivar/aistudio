@@ -1,12 +1,13 @@
 import logging
 import sys
 from pathlib import Path
-from aistudio.config import LOG_FILE
+from aistudio.config import LOG_FILE, LOG_LEVEL
 
 def setup_logger(name: str = "aistudio") -> logging.Logger:
     logger = logging.getLogger(name)
     if not logger.handlers:
-        logger.setLevel(logging.INFO)
+        level = getattr(logging, LOG_LEVEL, logging.DEBUG)
+        logger.setLevel(level)
         formatter = logging.Formatter(
             '[%(asctime)s] [%(levelname)s] [%(name)s]: %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
