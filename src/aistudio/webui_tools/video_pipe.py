@@ -216,30 +216,27 @@ class Pipe:
             response = requests.post(api_url, json=payload, timeout=900)
             if response.status_code == 200:
                 data = response.json()
-                video_url = data.get("final_video_url", "")
+                video_url = str(data.get("final_video_url", ""))
                 scenes = data.get("scenes", [])
                 poster_url = ""
                 if scenes and len(scenes) > 0 and "last_frame" in scenes[0]:
                     last_frame_path = scenes[0]["last_frame"]
                     frame_name = Path(last_frame_path).name
-                    base = api_url.split("/v1")[0]
-                    poster_url = f"{base}/static/video/{frame_name}"
+                    poster_url = f"/static/video/{frame_name}"
 
-                base = api_url.split("/v1")[0]
-                full_video_url = f"{base}{video_url}"
+                # Ensure strictly relative path
+                if "://" in video_url:
+                    video_url = "/" + video_url.split("://", 1)[1].split("/", 1)[-1]
+
+                if not video_url.startswith("/"):
+                    video_url = "/" + video_url
+
+                full_video_url = video_url
                 
                 if __event_emitter__:
                     await __event_emitter__({"type": "status", "data": {"description": "✨ Video generation complete!", "done": True}})
 
-                autoplay_attr = "autoplay loop playsinline" if autoplay else ""
-                poster_attr = f'poster="{poster_url}"' if poster_url else ""
-
-                video_player = f"""
-<video controls {autoplay_attr} {poster_attr} width="100%" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
-  <source src="{full_video_url}" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
-"""
+                video_player = f'<video src="{full_video_url}" controls width="100%" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">'
                 details = f"*Settings: {width}x{height} | {video_length}s ({num_frames} frames) @ {fps}fps | Steps: {steps} | Seed: {seed}*"
                 img_info = f"\n*Conditioning: {len(attached_images)} source image(s)*" if attached_images else ""
 

@@ -39,10 +39,92 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Ensure output directory exists and mount as static
+# Ensure output directory exists
 output_dir = OUTPUT_DIR
 output_dir.mkdir(parents=True, exist_ok=True)
+
+def stream_video_range(request: Request, video_path: Path):
+    """
+    HTTP 206 Partial Content Range streaming response for MP4 videos.
+    Required for native HTML5 video playback in Safari, Chrome, and Open WebUI WebKit containers.
+    """
+    if not video_path.exists() or not video_path.is_file():
+        raise HTTPException(status_code=404, detail="Video file not found")
+
+    file_size = video_path.stat().st_size
+    range_header = request.headers.get("range")
+    content_type = "video/mp4"
+
+    if not range_header:
+        def full_stream():
+            with open(video_path, "rb") as f:
+                yield from f
+
+        return StreamingResponse(
+            full_stream(),
+            status_code=200,
+            headers={
+                "Content-Length": str(file_size),
+                "Content-Type": content_type,
+                "Accept-Ranges": "bytes",
+                "Access-Control-Allow-Origin": "*",
+            },
+        )
+
+    range_str = range_header.replace("bytes=", "").strip()
+    parts = range_str.split("-")
+    start = int(parts[0]) if parts[0] else 0
+    end = int(parts[1]) if len(parts) > 1 and parts[1] else file_size - 1
+
+    start = max(0, start)
+    end = min(file_size - 1, end)
+    content_length = (end - start) + 1
+
+    def range_stream():
+        with open(video_path, "rb") as f:
+            f.seek(start)
+            bytes_left = content_length
+            chunk_size = 1024 * 1024
+            while bytes_left > 0:
+                chunk = f.read(min(chunk_size, bytes_left))
+                if not chunk:
+                    break
+                bytes_left -= len(chunk)
+                yield chunk
+
+    return StreamingResponse(
+        range_stream(),
+        status_code=206,
+        headers={
+            "Content-Range": f"bytes {start}-{end}/{file_size}",
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(content_length),
+            "Content-Type": content_type,
+            "Access-Control-Allow-Origin": "*",
+        },
+    )
+
+@app.get("/static/video/{filename}")
+@app.get("/output/video/{filename}")
+async def get_video_stream(request: Request, filename: str):
+    server_dir = Path(__file__).parent.parent.parent.parent
+    candidates = [
+        (OUTPUT_DIR / "video" / filename).resolve(),
+        (Path.cwd() / "output" / "video" / filename).resolve(),
+        (server_dir / "output" / "video" / filename).resolve(),
+        (Path.home() / "Documents" / "aistudio" / "output" / "video" / filename).resolve(),
+    ]
+    for video_path in candidates:
+        if video_path.exists() and video_path.is_file():
+            return stream_video_range(request, video_path)
+    raise HTTPException(status_code=404, detail=f"Video file '{filename}' not found")
+
+# Static files fallback
 app.mount("/static", StaticFiles(directory=str(output_dir)), name="static")
+
+
+
+
 
 @app.get("/")
 def read_root():

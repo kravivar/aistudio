@@ -455,7 +455,32 @@ def launch_webui(api_port: int, webui_port: int = 3000):
     def run_webui():
         # Import inside the thread so it picks up the patched os.environ
         from open_webui.main import app as webui_app
+        from fastapi import Request, HTTPException
+        from aistudio.server.app import stream_video_range, OUTPUT_DIR
+
+        @webui_app.get("/static/video/{filename}")
+        @webui_app.get("/output/video/{filename}")
+        async def get_webui_video_stream(request: Request, filename: str):
+            server_dir = Path(__file__).parent
+            candidates = [
+                (OUTPUT_DIR / "video" / filename).resolve(),
+                (Path.cwd() / "output" / "video" / filename).resolve(),
+                (server_dir / "output" / "video" / filename).resolve(),
+                (Path.home() / "Documents" / "aistudio" / "output" / "video" / filename).resolve(),
+            ]
+            for video_path in candidates:
+                print(f'Checking {video_path}: {video_path.exists()} {video_path.is_file()}')
+                if video_path.exists() and video_path.is_file():
+                    return stream_video_range(request, video_path)
+            raise HTTPException(status_code=404, detail=f"Video file '{filename}' not found")
+        # Move the routes to the front so they aren't overshadowed by Open WebUI's static mount
+        route1 = webui_app.routes.pop()
+        route2 = webui_app.routes.pop()
+        webui_app.routes.insert(0, route2)
+        webui_app.routes.insert(0, route1)
+
         uvicorn.run(webui_app, host="0.0.0.0", port=webui_port, log_level="warning")
+
         
     t = threading.Thread(target=run_webui, daemon=True)
     t.start()

@@ -313,41 +313,12 @@ class ModelManager:
     async def _ensure_memory_available(self, pipeline_type: str):
         """
         If memory usage exceeds budget, attempt to evict idle pipelines.
-        If still over budget after eviction, wait with exponential backoff.
+        Proceed immediately once idle pipelines have been evicted.
         """
-        max_wait = 300  # 5 minutes
-        start = time.time()
-        wait_interval = 1.0
-
-        while True:
-            current = self.get_memory_usage_bytes()
-
-            if current < self.memory_budget_bytes:
-                return
-
-            # Attempt LRU eviction of idle pipelines
-            freed = await self._evict_idle_pipeline(exclude=pipeline_type)
-            if freed:
-                wait_interval = 1.0
-                continue
-
-            elapsed = time.time() - start
-            if elapsed > max_wait:
-                self._requests_timed_out += 1
-                logger.warning(
-                    f"Memory wait timeout for '{pipeline_type}' after {max_wait}s. "
-                    f"Current: {current / 1e9:.1f}GB / Budget: {self.memory_budget_bytes / 1e9:.1f}GB. "
-                    f"Proceeding to avoid deadlock."
-                )
-                return
-
-            logger.info(
-                f"Memory over budget ({current / 1e9:.1f}GB / "
-                f"{self.memory_budget_bytes / 1e9:.1f}GB). "
-                f"Queuing '{pipeline_type}' request, retrying in {wait_interval:.0f}s..."
-            )
-            await asyncio.sleep(wait_interval)
-            wait_interval = min(wait_interval * 1.5, 10)
+        current = self.get_memory_usage_bytes()
+        if current >= self.memory_budget_bytes:
+            await self._evict_idle_pipeline(exclude=pipeline_type)
+        return
 
     async def _evict_idle_pipeline(self, exclude: str = None) -> bool:
         """
