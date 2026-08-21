@@ -124,6 +124,7 @@ class VideoPipeline(BasePipeline):
                     "num_frames": int(calculated_frames),
                     "frame_rate": float(fps),
                     "seed": int(seed),
+                    "stage1_steps": int(steps),
                 }
 
                 if images and len(images) > 0:

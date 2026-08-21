@@ -53,12 +53,16 @@ class Pipe:
 
     def pipes(self) -> List[dict]:
         try:
-            response = requests.get(f"{self.valves.api_base_url}/internal/models", timeout=5)
+            response = requests.get(
+                f"{self.valves.api_base_url}/models",
+                headers={"accept": "application/json"},
+                timeout=5
+            )
             if response.status_code == 200:
                 models = response.json().get("data", [])
                 video_models = [
                     {"id": f"video-studio-{m['id']}", "name": f"🎥 {m['id']}"}
-                    for m in models if m.get("type") == "video" or "ltx" in m.get("id", "").lower()
+                    for m in models if m.get("type") == "video"
                 ]
                 if video_models:
                     return video_models

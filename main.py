@@ -153,11 +153,195 @@ def patch_open_webui_db(data_dir: Path, api_port: int = 8000):
             except Exception as e:
                 pass
 
+def patch_pypdf_parser():
+    """
+    Safely patch PyPDFParser and RapidOCRBlobParser to prevent reshape/decoding errors,
+    resolve rapidocr_onnxruntime tuple output incompatibilities, and ensure all 100+ pages
+    of large scanned/OCR PDFs are fully parsed.
+    """
+    try:
+        import sys
+        import io
+        import logging
+        from typing import cast, Any
+        import pypdf
+        from PIL import Image
+        import numpy as np
+        import langchain_community.document_loaders.parsers.pdf as pdf_parser
+        import langchain_community.document_loaders.parsers.images as img_parser
+        from langchain_core.documents.base import Blob, Document
+
+        # Alias rapidocr_onnxruntime for modules looking for 'rapidocr'
+        try:
+            import rapidocr_onnxruntime
+            sys.modules["rapidocr"] = rapidocr_onnxruntime
+        except ImportError:
+            pass
+
+        # Fix RapidOCRBlobParser._analyze_image to handle rapidocr_onnxruntime return tuple
+        def safe_analyze_image(self, img):
+            if not hasattr(self, "_ocr_engine") or self._ocr_engine is None:
+                try:
+                    from rapidocr_onnxruntime import RapidOCR
+                    self._ocr_engine = RapidOCR()
+                except Exception as e:
+                    logging.warning(f"Failed to initialize RapidOCR: {e}")
+                    return ""
+            try:
+                res, _ = self._ocr_engine(np.array(img))
+                if res:
+                    return "\n".join([line[1] for line in res if len(line) > 1 and line[1]]).strip()
+            except Exception as e:
+                logging.warning(f"RapidOCR analysis error: {e}")
+            return ""
+
+        img_parser.RapidOCRBlobParser._analyze_image = safe_analyze_image
+
+        def safe_extract_images_from_page(self, page: pypdf._page.PageObject) -> str:
+            if not self.images_parser:
+                return ""
+            try:
+                resources = cast(dict, page.get("/Resources", {}))
+                if not resources or "/XObject" not in resources:
+                    return ""
+                xObject = resources["/XObject"]
+                if hasattr(xObject, "get_object"):
+                    xObject = xObject.get_object()
+                if not xObject:
+                    return ""
+            except Exception as e:
+                logging.warning(f"Error accessing PDF page XObjects: {e}")
+                return ""
+
+            images = []
+            for obj in xObject:
+                try:
+                    obj_item = xObject[obj]
+                    if hasattr(obj_item, "get_object"):
+                        obj_item = obj_item.get_object()
+
+                    if obj_item.get("/Subtype") == "/Image":
+                        img_filter_obj = obj_item.get("/Filter")
+                        if isinstance(img_filter_obj, pypdf.generic._base.NameObject):
+                            img_filter = img_filter_obj[1:]
+                        elif isinstance(img_filter_obj, list) and len(img_filter_obj) > 0:
+                            img_filter = img_filter_obj[0][1:]
+                        else:
+                            img_filter = ""
+
+                        np_image: Any = None
+                        data = obj_item.get_data()
+                        if img_filter in pdf_parser._PDF_FILTER_WITHOUT_LOSS:
+                            height, width = obj_item.get("/Height"), obj_item.get("/Width")
+                            arr = np.frombuffer(data, dtype=np.uint8)
+                            if height and width and arr.size >= (height * width) and (arr.size % (height * width) == 0):
+                                np_image = arr.reshape(height, width, -1)
+                            else:
+                                try:
+                                    np_image = np.array(Image.open(io.BytesIO(data)))
+                                except Exception:
+                                    pass
+                        elif img_filter in pdf_parser._PDF_FILTER_WITH_LOSS:
+                            try:
+                                np_image = np.array(Image.open(io.BytesIO(data)))
+                            except Exception:
+                                pass
+                        else:
+                            try:
+                                np_image = np.array(Image.open(io.BytesIO(data)))
+                            except Exception:
+                                pass
+
+                        if np_image is not None:
+                            image_bytes = io.BytesIO()
+                            Image.fromarray(np_image).save(image_bytes, format="PNG")
+                            if image_bytes.getbuffer().nbytes == 0:
+                                continue
+
+                            blob = Blob.from_data(image_bytes.getvalue(), mime_type="image/png")
+                            # Safely fetch OCR results without calling next() directly (prevents StopIteration exception in generators)
+                            ocr_results = list(self.images_parser.lazy_parse(blob))
+                            if ocr_results:
+                                image_text = ocr_results[0].page_content
+                                if image_text and image_text.strip():
+                                    images.append(
+                                        pdf_parser._format_inner_image(blob, image_text, self.images_inner_format)
+                                    )
+                except Exception as e:
+                    logging.warning(f"Skipping malformed or unsupported PDF image stream '{obj}': {e}")
+                    continue
+
+            return pdf_parser._FORMAT_IMAGE_STR.format(
+                image_text=pdf_parser._JOIN_IMAGES.join(filter(None, images))
+            )
+
+        def safe_lazy_parse(self, blob: Blob):
+            """
+            Per-page resilient PDF parser loop so that errors on individual pages do not abort parsing of remaining pages.
+            """
+            with blob.as_bytes_io() as pdf_file_obj:
+                pdf_reader = pypdf.PdfReader(pdf_file_obj, password=self.password)
+                doc_metadata = pdf_parser._purge_metadata(
+                    {"producer": "PyPDF", "creator": "PyPDF", "creationdate": ""}
+                    | cast(dict, pdf_reader.metadata or {})
+                    | {
+                        "source": blob.source,
+                        "total_pages": len(pdf_reader.pages),
+                    }
+                )
+                single_texts = []
+                for page_number, page in enumerate(pdf_reader.pages):
+                    try:
+                        text_from_page = pdf_parser._extract_text_from_page(page=page) or ""
+                    except Exception:
+                        text_from_page = ""
+
+                    try:
+                        images_from_page = self.extract_images_from_page(page) or ""
+                    except Exception:
+                        images_from_page = ""
+
+                    all_text = pdf_parser._merge_text_and_extras(
+                        [images_from_page], text_from_page
+                    ).strip()
+
+                    if self.mode == "page":
+                        page_label = ""
+                        try:
+                            if hasattr(pdf_reader, "page_labels") and pdf_reader.page_labels and page_number < len(pdf_reader.page_labels):
+                                page_label = pdf_reader.page_labels[page_number]
+                        except Exception:
+                            pass
+                        yield Document(
+                            page_content=all_text,
+                            metadata=pdf_parser._validate_metadata(
+                                doc_metadata
+                                | {
+                                    "page": page_number,
+                                    "page_label": page_label,
+                                }
+                            ),
+                        )
+                    else:
+                        single_texts.append(all_text)
+
+                if self.mode == "single":
+                    yield Document(
+                        page_content=self.pages_delimiter.join(single_texts),
+                        metadata=pdf_parser._validate_metadata(doc_metadata),
+                    )
+
+        pdf_parser.PyPDFParser.extract_images_from_page = safe_extract_images_from_page
+        pdf_parser.PyPDFParser.lazy_parse = safe_lazy_parse
+    except Exception as e:
+        print(f"⚠️ PyPDFParser patch warning: {e}")
+
 def launch_webui(api_port: int, webui_port: int = 3000):
     """
     Launches Open WebUI connected to local ai_studio API server natively via Python.
     Configured to store all database & RAG files under project ./data folder.
     """
+    patch_pypdf_parser()
     server_cfg = APP_CONFIG.get("server", {})
     webui_cfg = APP_CONFIG.get("webui", {})
     webui_port = webui_cfg.get("port", webui_port)
@@ -234,6 +418,12 @@ def launch_webui(api_port: int, webui_port: int = 3000):
     env["PDF_EXTRACT_IMAGES"] = str(doc_cfg.get("pdf_extract_images", True))
     env["ENABLE_OCR_TEXT_EXTRACTION"] = str(doc_cfg.get("enable_ocr_text_extraction", True))
     env["CONTENT_EXTRACTION_ENGINE"] = str(doc_cfg.get("content_extraction_engine", ""))
+
+    # Increase RAG Retrieval Capacity for Large Documents (Dossiers across 100+ pages)
+    top_k = str(doc_cfg.get("top_k", 20))
+    env["RAG_TOP_K"] = top_k
+    env["RAG_TOP_K_RERANKER"] = top_k
+    env["RAG_FULL_CONTEXT"] = str(doc_cfg.get("full_context", True))
 
     # Image Generation Integration
     env["ENABLE_IMAGE_GENERATION"] = "True"

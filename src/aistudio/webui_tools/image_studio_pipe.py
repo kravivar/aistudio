@@ -39,20 +39,22 @@ class Pipe:
 
     def pipes(self) -> List[dict]:
         try:
-            # We fetch from /internal/models so we can see image models even if they are hidden from the public API
-            response = requests.get(f"{self.valves.api_base_url}/internal/models", timeout=5)
+            response = requests.get(
+                f"{self.valves.api_base_url}/models",
+                headers={"accept": "application/json"},
+                timeout=5
+            )
             if response.status_code == 200:
                 models = response.json().get("data", [])
                 image_models = [
                     {"id": f"image-studio-{m['id']}", "name": f"🎨 {m['id']}"}
-                    for m in models if m.get("type") in ["diffusion", "image"] or m.get("id", "").endswith((".safetensors", ".bin", ".gguf"))
+                    for m in models if m.get("type") in ("image", "diffusion")
                 ]
-                return image_models
-            else:
-                print(f"PIPES HTTP ERROR: {response.status_code} - {response.text}")
-        except Exception as e:
-            print(f"PIPES EXCEPTION: {e}")
-        return [{"id": "image-studio-error", "name": "🎨 Image Studio (Backend Offline)"}]
+                if image_models:
+                    return image_models
+        except Exception:
+            pass
+        return [{"id": "image-studio-RunDiffusion/Juggernaut-XI-v11", "name": "🎨 RunDiffusion/Juggernaut-XI-v11"}]
 
     async def pipe(
         self,

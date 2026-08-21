@@ -232,9 +232,9 @@ async def chat_completions(request: Request, req: ChatCompletionRequest):
             logger.error(f"Video generation via chat auto-route failed: {e}")
             raise HTTPException(status_code=500, detail=f"Video generation failed: {e}")
 
-    # ── Auto-detect diffusion models and route to image generation ──────────
-    if model_type == "diffusion":
-        logger.info(f"Auto-routing diffusion model '{req.model}' from chat to image pipeline")
+    # ── Auto-detect image/diffusion models and route to image generation ───
+    if model_type in ("image", "diffusion"):
+        logger.info(f"Auto-routing image model '{req.model}' from chat to image pipeline")
 
         if not user_prompt.strip():
             raise HTTPException(status_code=400, detail="No prompt found in messages for image generation.")
@@ -411,12 +411,15 @@ async def image_generations(req: ImageGenerationRequest):
     Queued via ModelManager to prevent memory overcommit.
     """
     try:
+        default_img = get_model_config(model_type="image").get("id", "RunDiffusion/Juggernaut-XI-v11")
+        target_model = req.model if req.model and req.model not in ("dall-e-2", "dall-e-3", "default") else default_img
+
         async with model_manager.acquire("image"):
             res = await model_manager.run_in_thread(
                 image_pipeline.generate,
                 prompt=req.prompt,
                 negative_prompt=req.negative_prompt or "blurry",
-                model_id=req.model or "juggernautXL_ragnarokBy.safetensors",
+                model_id=target_model,
                 n=req.n or 1,
                 size=req.size or "1024x1024",
                 num_inference_steps=req.num_inference_steps or 8,

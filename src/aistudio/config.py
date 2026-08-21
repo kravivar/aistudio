@@ -127,22 +127,22 @@ def get_model_config(model_id: Optional[str] = None, model_type: Optional[str] =
     from `server.default_models` array in config.yml.
     """
     default_models = _server_cfg.get("default_models") or []
-    if model_id and isinstance(default_models, list):
+    if not isinstance(default_models, list):
+        return {}
+
+    if model_id:
         for m in default_models:
             if isinstance(m, dict):
                 mid = m.get("id", "")
-                if mid == model_id or mid in model_id or model_id in mid:
+                if mid and mid == model_id:
                     return m.copy()
 
-    if model_type and isinstance(default_models, list):
+    if model_type:
         for m in default_models:
             if isinstance(m, dict) and m.get("type") == model_type:
                 return m.copy()
 
-    if isinstance(default_models, list) and default_models and isinstance(default_models[0], dict):
-        return default_models[0].copy()
-
-    return {"id": model_id or "default"}
+    return {}
 
 # Fallback LLM generation defaults
 DEFAULT_MODEL: str = str(_configured_default_model or "mlx-community/Qwen3.6-35B-A3B-4bit")
@@ -150,17 +150,16 @@ DEFAULT_MAX_TOKENS: int = int(_first_model.get("max_tokens", 8192))
 DEFAULT_TEMPERATURE: float = float(_first_model.get("temperature", 0.7))
 DEFAULT_THINKING_MODE: str = str(_first_model.get("thinking_mode", "stream"))
 
-# Optional directory for custom local checkpoints / .safetensors files
+# Optional directory for custom local checkpoints
 CUSTOM_MODELS_DIR = os.getenv("AI_STUDIO_MODELS_DIR", "./models")
 
-# Automatically gather search paths (HF_HOME, custom models dir, ./models, ~/Documents/aistudio/models)
+# Gather search paths
 _search_candidates = [
     CUSTOM_MODELS_DIR,
     str(AISTUDIO_HOME / "models"),
     HF_HOME,
     "./models",
 ]
-# Support optional colon-separated extra paths if provided
 extra_paths_env = os.getenv("AI_STUDIO_MODEL_SEARCH_PATHS", "")
 if extra_paths_env:
     _search_candidates.extend(extra_paths_env.split(":"))
@@ -177,7 +176,7 @@ for p in _search_candidates:
 def resolve_model_path(model_id_or_path: str) -> str:
     """
     Checks if model_id_or_path is an absolute path or exists within any 
-    configured external drive / local search paths (including subfolders like $HF_HOME/custom_safetensors).
+    configured local search paths.
     """
     cfg = get_model_config(model_id_or_path)
     if cfg and "from_file" in cfg:
@@ -193,74 +192,94 @@ def resolve_model_path(model_id_or_path: str) -> str:
         potential_path = search_dir / model_id_or_path
         if potential_path.exists():
             return str(potential_path.resolve())
-
-        # Support subfolder lookups like $HF_HOME/custom_safetensors/model.safetensors
-        if search_dir.exists():
-            matches = list(search_dir.rglob(model_id_or_path))
-            if matches:
-                return str(matches[0].resolve())
             
     return model_id_or_path
 
 def detect_model_type(model_id_or_path: str) -> str:
     """
-    Inspects the resolved model path and returns the likely model type:
-      - Reads explicitly from config.yml first if 'type' is defined.
-      - 'llm'       : directory with config.json (standard mlx_lm / HF model)
-      - 'diffusion'  : standalone .safetensors / .bin file (e.g. SDXL checkpoint)
-      - 'unknown'    : cannot determine (e.g. HuggingFace Hub ID not yet downloaded)
+    Inspects the model ID or path and returns the matching model type ('llm', 'image', 'video', 'embedding', 'audio').
+    - Reads explicitly from config.yml first if 'type' is defined.
+    - Otherwise detects based on model identifier patterns.
     """
     cfg = get_model_config(model_id_or_path)
-    if cfg and "type" in cfg:
-        # Map 'image' or 'video' config definitions to diffusion auto-routing
-        if cfg["type"] == "image":
-            return "diffusion"
+    if cfg and "type" in cfg and cfg["type"]:
         return cfg["type"]
 
-    resolved = Path(resolve_model_path(model_id_or_path))
+    name_lower = model_id_or_path.lower()
+    if "ltx" in name_lower or "video" in name_lower or "wan" in name_lower or "cogvideo" in name_lower:
+        return "video"
+    if "whisper" in name_lower or "speech" in name_lower or "audio" in name_lower:
+        return "audio"
+    if any(k in name_lower for k in ("minilm", "bge-", "e5-", "embed", "bert", "gte-")):
+        return "embedding"
+    if any(k in name_lower for k in ("diffusion", "flux", "sdxl", "juggernaut", "stable-diffusion", "sd-", "image")):
+        return "image"
 
-    # A directory with config.json is an LLM / HF model directory
-    if resolved.is_dir():
-        if (resolved / "config.json").exists():
-            return "llm"
-        return "unknown"
-
-    # A standalone weight file without a neighbouring config.json is a diffusion checkpoint
-    if resolved.is_file() and resolved.suffix in (".safetensors", ".bin", ".gguf"):
-        if (resolved.parent / "config.json").exists():
-            return "llm"   # weight file inside a proper LLM model dir
-        return "diffusion"
-
-    return "unknown"
+    return "llm"
 
 def scan_available_models() -> List[Dict[str, Any]]:
     """
-    Scans search paths recursively for local models (LLM directories, safetensors, whisper models).
+    Lists models from HuggingFace local cache (`hf cache ls`) enriched by `config.yml`.
+    - Gets all model repo IDs from the Hugging Face cache.
+    - If the model ID exists in config.yml, uses the configuration from config.yml.
+    - If not in config.yml, auto-detects model type (llm, image, video, embedding, audio).
+    - Also includes custom models explicitly specified in config.yml.
+    - No standalone filesystem safetensors scanning.
     """
+    config_models = _server_cfg.get("default_models") or []
+    config_dict = {m["id"]: m for m in config_models if isinstance(m, dict) and "id" in m}
+
+    # 1. Fetch cached repo IDs from HuggingFace cache (`hf cache ls`)
+    cached_repos = []
+    try:
+        from huggingface_hub import scan_cache_dir
+        cache_info = scan_cache_dir()
+        for r in cache_info.repos:
+            if getattr(r, "repo_type", "model") == "model":
+                cached_repos.append(r.repo_id)
+    except Exception:
+        hub_dir = Path(HF_HOME) / "hub"
+        if hub_dir.exists():
+            for d in hub_dir.glob("models--*"):
+                if d.is_dir():
+                    cached_repos.append(d.name.replace("models--", "").replace("--", "/"))
+
     models = []
-    seen_ids = set()
+    seen = set()
 
-    # Pre-defined default models from config.yml
-    defaults = _server_cfg.get("default_models") or [
-        {"id": "mlx-community/gemma-2-9b-it-4bit", "owned_by": "mlx-community", "type": "llm"}
-    ]
+    # 2. For each cached repo from `hf cache ls`: use config.yml if present, else auto-detect type
+    for repo_id in cached_repos:
+        if repo_id in seen:
+            continue
 
-    for d in defaults:
-        models.append({"id": d["id"], "object": "model", "owned_by": d.get("owned_by", "custom"), "type": d.get("type", "llm")})
-        seen_ids.add(d["id"])
+        if repo_id in config_dict:
+            cfg_m = config_dict[repo_id].copy()
+            models.append({
+                "id": repo_id,
+                "object": "model",
+                "owned_by": cfg_m.get("owned_by", repo_id.split("/")[0] if "/" in repo_id else "custom"),
+                "type": cfg_m.get("type", detect_model_type(repo_id))
+            })
+        else:
+            mtype = detect_model_type(repo_id)
+            models.append({
+                "id": repo_id,
+                "object": "model",
+                "owned_by": repo_id.split("/")[0] if "/" in repo_id else "custom",
+                "type": mtype
+            })
+        seen.add(repo_id)
 
-    # Scan search paths for standalone custom .safetensors checkpoints
-    for search_dir in MODEL_SEARCH_PATHS:
-        if search_dir.exists() and search_dir.is_dir():
-            for f in search_dir.rglob("*.safetensors"):
-                if f.name not in seen_ids:
-                    mtype = detect_model_type(str(f))
-                    models.append({
-                        "id": f.name,
-                        "object": "model",
-                        "owned_by": "custom",
-                        "type": mtype
-                    })
-                    seen_ids.add(f.name)
+    # 3. Include any additional models explicitly defined in config.yml
+    for cfg_m in config_models:
+        if isinstance(cfg_m, dict) and "id" in cfg_m and cfg_m["id"] not in seen:
+            mid = cfg_m["id"]
+            models.append({
+                "id": mid,
+                "object": "model",
+                "owned_by": cfg_m.get("owned_by", mid.split("/")[0] if "/" in mid else "custom"),
+                "type": cfg_m.get("type", detect_model_type(mid))
+            })
+            seen.add(mid)
 
     return models

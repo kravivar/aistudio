@@ -11,19 +11,16 @@ def test_scan_available_models():
     assert len(models) > 0
     assert "id" in models[0]
 
-def test_resolve_recursive_custom_safetensors(tmp_path, monkeypatch):
-    custom_subfolder = tmp_path / "custom_safetensors"
-    custom_subfolder.mkdir()
-    dummy_file = custom_subfolder / "test_model.safetensors"
-    dummy_file.write_text("dummy model data")
-
-    monkeypatch.setattr("aistudio.config.MODEL_SEARCH_PATHS", [tmp_path])
-    resolved = resolve_model_path("test_model.safetensors")
-    assert resolved == str(dummy_file.resolve())
-
+def test_resolve_custom_config_model(monkeypatch):
+    from aistudio.config import _server_cfg, scan_available_models
+    monkeypatch.setitem(_server_cfg, "default_models", [
+        {"id": "custom-user-model", "type": "image", "owned_by": "custom"}
+    ])
     scanned = scan_available_models()
     scanned_ids = [m["id"] for m in scanned]
-    assert "test_model.safetensors" in scanned_ids
+    assert "custom-user-model" in scanned_ids
+    custom_entry = next(m for m in scanned if m["id"] == "custom-user-model")
+    assert custom_entry["type"] == "image"
 
 def test_get_model_config():
     from aistudio.config import get_model_config

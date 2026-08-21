@@ -23,12 +23,17 @@ class DiffusersPipeline(BaseImagePipeline):
         except Exception:
             return False
 
-    def load_pipeline(self, model_id: str, resolved_path: str):
+    def load_pipeline(self, model_id: str, resolved_path: str, default_diffusion_pipeline="DiffusionPipeline"):
         if self.current_model_id == model_id and self.pipe is not None:
             return
 
         import torch
-        from diffusers import StableDiffusionXLPipeline
+        from diffusers import StableDiffusionXLPipeline, DiffusionPipeline
+
+        if default_diffusion_pipeline == "DiffusionPipeline":
+            diffusion_pipeline = DiffusionPipeline
+        else:
+            diffusion_pipeline = StableDiffusionXLPipeline
 
         device = "mps" if torch.backends.mps.is_available() else "cpu"
         torch_dtype = torch.bfloat16 if device == "mps" else torch.float32
@@ -37,7 +42,7 @@ class DiffusersPipeline(BaseImagePipeline):
             if self._is_lora_safetensors(resolved_path):
                 logger.info(f"Detected LoRA adapter. Loading base SDXL model ({self.SDXL_BASE_MODEL}) and applying LoRA weights...")
                 base_path = resolve_model_path(self.SDXL_BASE_MODEL)
-                self.pipe = StableDiffusionXLPipeline.from_pretrained(
+                self.pipe = diffusion_pipeline.from_pretrained(
                     base_path,
                     torch_dtype=torch_dtype,
                     use_safetensors=True,
@@ -46,13 +51,13 @@ class DiffusersPipeline(BaseImagePipeline):
                 self.pipe.fuse_lora()
                 logger.info("LoRA weights fused into base pipeline.")
             else:
-                self.pipe = StableDiffusionXLPipeline.from_single_file(
+                self.pipe = diffusion_pipeline.from_single_file(
                     resolved_path,
                     torch_dtype=torch_dtype,
                     use_safetensors=True,
                 )
         else:
-            self.pipe = StableDiffusionXLPipeline.from_pretrained(
+            self.pipe = diffusion_pipeline.from_pretrained(
                 resolved_path,
                 torch_dtype=torch_dtype,
             )
@@ -63,8 +68,16 @@ class DiffusersPipeline(BaseImagePipeline):
 
     def generate(self, prompt: str, negative_prompt: Optional[str] = None, width: int = 1024, height: int = 1024, num_inference_steps: int = 8, guidance_scale: float = 2.0, seed: Optional[int] = None) -> Any:
         import torch
+        import time
         device = "mps" if torch.backends.mps.is_available() else "cpu"
         
+        start_time = time.time()
+        logger.info(
+            f"🎨 Generating image via Diffusers ({self.current_model_id}) | "
+            f"Prompt: '{prompt[:60]}...' | Res: {width}x{height} | Steps: {num_inference_steps} | "
+            f"Guidance: {guidance_scale} | Seed: {seed} on {device}"
+        )
+
         kwargs = {
             "prompt": prompt,
             "width": width,
@@ -80,7 +93,10 @@ class DiffusersPipeline(BaseImagePipeline):
             generator.manual_seed(seed)
             kwargs["generator"] = generator
             
-        return self.pipe(**kwargs).images[0]
+        result = self.pipe(**kwargs).images[0]
+        elapsed = time.time() - start_time
+        logger.info(f"✨ Image generation completed in {elapsed:.2f}s ({num_inference_steps} steps)")
+        return result
 
     def unload(self):
         self.pipe = None
